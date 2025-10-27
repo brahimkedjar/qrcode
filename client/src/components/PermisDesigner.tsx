@@ -426,7 +426,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
   const isTXC = (selectedArticleSet || '').toLowerCase().includes('txc');
   let marginX = isTXC ? 24 : 40;
   const padding = 1;
-  let defaultArticleGap = isTXC ? 1 : 2; 
+  let defaultArticleGap = isTXC ? 1: 2; 
   let decisionGap = isTXC ? 6 : 10;
   let startY = isTXC ? 24 : 40;
   const bottomMargin = 20;
@@ -473,19 +473,34 @@ function createCornerDecorations(color: string, width: number, height: number): 
   );
   const holderDisplay = pickFirstNonEmpty(holderArabic, holderLatin);
  
-  const replaceHolderDots = (text?: string) => {
-    const t = String(text || '');
-    if (!t) return t;
-    if (!holderDisplay) return t;
-    return t
-      // السيد/السيدة .......
-      .replace(/(السيد)\s*\.{2,}/g, `$1 ${holderDisplay}`)
-      .replace(/(السيدة)\s*\.{2,}/g, `$1 ${holderDisplay}`)
-      // المقدم من طرف .......
-      .replace(/(المقدم\s+من\s+طرف)\s*\.{2,}/g, `$1 ${holderDisplay}`)
-      // ....... المقدم من طرف
-      .replace(/\.{2,}\s*(?=المقدم\s+من\s+طرف)/g, `${holderDisplay} `);
-  };
+    // Decide licensed-material suffix based on typeCode (prospection/exploration => باستكشافها, others => باستغلالها)
+    const typeCodeRaw = String((initialData?.typePermis?.code || (initialData?.typePermis as any)?.Code || '') || '').toUpperCase();
+    const explorationCodes = new Set(['AP','PE','PPM','PEM','PEC']);
+    const isExplorationByCode = explorationCodes.has(typeCodeRaw);
+    const materialSuffixByCode = isExplorationByCode ? 'المُرخص باستكشافها' : 'المُرخص باستغلالها:';
+
+    const replaceHolderDots = (text?: string) => {
+      const t = String(text || '');
+      if (!t) return t;
+      if (!holderDisplay) return t;
+      // Determine type phrases (prefer code mapping; keep heuristics as fallback)
+      const typeLabelAr = String((initialData?.typePermis?.libelle_ar || (initialData?.typePermis as any)?.LabelAr || (initialData?.typePermis as any)?.libelle || selectedArticleSet || '') || '').toLowerCase();
+      const isExplorationHeuristic = typeLabelAr.includes('الاستكشاف') || /txc|tec|tem/.test(String(selectedArticleSet || '').toLowerCase());
+      const materialSuffix = isExplorationByCode || isExplorationHeuristic ? 'المُرخص باستكشافها' : 'المُرخص باستغلالها:';
+      return t
+        // المادة المرخّصة .... or لمادة المرخصة .... -> replace dots with type-specific phrase
+        .replace(/(ل?\s*الم[ـ\s]*ادة)\s+المرخ[\u0600-\u06FFA-Za-z\-\u064B-\u0652]*\s*[\.\u2026]{2,}/g, (_m: string, pre: string) => `${pre} ${materialSuffix}`)
+        // المادة .... -> generic fallback
+        .replace(/(ل?\s*الم[ـ\s]*ادة)\s*[\.\u2026]{2,}/g, (_m: string, pre: string) => `${pre} ${materialSuffix}`)
+        // السيد/السيدة .......
+        .replace(/(السيد)\s*\.{2,}/g, `$1 ${holderDisplay}`)
+        .replace(/(السيدة)\s*\.{2,}/g, `$1 ${holderDisplay}`)
+        // المقدم من طرف .......
+        .replace(/(المقدم\s+من\s+طرف)\s*\.{2,}/g, `$1 ${holderDisplay}`)
+        // ....... المقدم من طرف
+        .replace(/\.{2,}\s*(?=المقدم\s+من\s+طرف)/g, `${holderDisplay} `)
+        ;
+    };
   const statutJuridique = pickFirstNonEmpty(
     (initialData?.detenteur as any)?.StatutArab,
     (initialData?.detenteur as any)?.StatutJuridique?.StatutArab,
@@ -506,6 +521,295 @@ function createCornerDecorations(color: string, width: number, height: number): 
     content: replaceStatut(replaceHolderDots((a as any).content)),
   }));
 
+  // If 'decision' is present, combine all following articles into one text element and fit to a single page
+  if (articleIds.includes('decision')) {
+    const size = canvasSizes[PAGES.ARTICLES] || { width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height };
+    const contentWidth = size.width - marginX * 2;
+    const rightEdge = marginX + contentWidth - padding;
+    const elementXForScale = (innerWidth: number, scale: number) => rightEdge - (innerWidth * scale);
+    // Simple measurement helpers
+    let __mCtx: CanvasRenderingContext2D | null = null;
+    const ensureCtx = () => { try { if (__mCtx) return __mCtx; const c = document.createElement('canvas'); const ctx = c.getContext('2d'); if (ctx) __mCtx = ctx; return __mCtx; } catch {} return null; };
+    const measureW = (s: string, fs: number, fam?: string) => { const ctx = ensureCtx(); if (ctx) { try { const quoted = fam && /\s/.test(fam) ? `"${fam}"` : (fam || 'Arial'); ctx.font = `${Math.max(8, fs)}px ${quoted}`; const m = ctx.measureText(s); return Math.ceil(m.width || 0); } catch {} } return Math.ceil((s || '').length * fs * 0.48); };
+    const wrapH = (text: string, widthPx: number, fs: number, fam?: string, lh = 1.5) => {
+      const w = Math.max(10, Math.floor(widthPx));
+      const paras = String(text || '').split(/\r?\n/);
+      let totalLines = 0;
+      for (const para of paras) {
+        const tokens = para.split(/(\s+)/); // keep spaces
+        let lineW = 0;
+        let lines = 0;
+        for (const tk of tokens) {
+          const tw = measureW(tk, fs, fam);
+          if (lineW > 0 && lineW + tw > w) {
+            if (!/^\s+$/.test(tk)) { lines++; lineW = tw; }
+          } else {
+            lineW += tw;
+          }
+        }
+        // count the last line (even if empty para, ensure at least 1)
+        totalLines += Math.max(1, lines + 1);
+      }
+      return Math.max(fs * lh, Math.ceil(totalLines * fs * lh));
+    };
+
+    const idToItem = new Map(replacedSource.map(a => [a.id, a] as const));
+    const decisionIdx = articleIds.findIndex(id => id === 'decision');
+    const beforeIds = articleIds.slice(0, decisionIdx).filter(id => idToItem.has(id));
+    const afterIds = articleIds.slice(decisionIdx + 1).filter(id => idToItem.has(id));
+
+    const baseFont = isTXC ? 18 : 24;
+    const baseLH = isTXC ? 1.3 : 1.6;
+    let yCursor = startY;
+    const builtIntro: PermisElement[] = [];
+    // Prepare dynamic substitutions (hoisted before intro processing)
+    const beneficiaryText = [statutJuridique, holderDisplay].filter(Boolean).join(' ');
+    const expDate = String((initialData as any)?.date_expiration_fr || '').trim();
+    const fmtFr = (d: Date | null) => (d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '');
+    const parseDate = (v: any): Date | null => {
+      if (!v && v !== 0) return null;
+      if (v instanceof Date) return isNaN(+v) ? null : v;
+      const s = String(v).trim();
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) { const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])); return isNaN(+d) ? null : d; }
+      const d2 = new Date(s);
+      return isNaN(+d2) ? null : d2;
+    };
+    let octroiDate = String((initialData as any)?.date_octroi_fr || '').trim();
+    if (!octroiDate) {
+      const dStart = parseDate((initialData as any)?.DateOctroi
+        || (initialData as any)?.dateDebut
+        || (initialData as any)?.date_debut
+        || (initialData as any)?.date_octroi
+        || (initialData as any)?.dateCreation);
+      octroiDate = fmtFr(dStart);
+    }
+    const substance = String((initialData as any)?.substance_ar || '').trim();
+    const lieuDitStr = String((initialData as any)?.lieudit || '').trim();
+    const communeStr = String((initialData as any)?.commune || '').trim();
+    const dairaStr = String((initialData as any)?.daira || '').trim();
+    const wilayaStr = String((initialData as any)?.wilaya || (initialData as any)?.localisation || '').trim();
+    // Build intro items (before decision)
+  beforeIds.forEach(id => {
+    const el = idToItem.get(id)!;
+    const title = (el.title || '').trim();
+    const hasColon = /[:ï¼š]$/.test(title);
+    let combined = title ? `${hasColon ? title : title + ' :'} ${el.content || ''}` : (el.content || '');
+    // Apply the same placeholder substitutions as for post-decision articles
+    // Beneficiary (لفائدة ....)
+    if (beneficiaryText) {
+      combined = combined.replace(/(\u0644\u0641\u0627\u0626\u062F\u0629)\s*[:\u061B\u003A\uFE55]?\s*[\.\u2026_\-]{2,}/gu, (_m, g1) => `${g1} ${beneficiaryText}`);
+    }
+    // Registered/on dates: only fill the attribution registration "المسجل بتاريخ" in considerations
+    if (octroiDate) {
+      combined = combined.replace(/(\u0627\u0644\u0645\u0633\u062C[\u064B-\u0652]?\u0644\s+\u0628\u062A\u0627\u0631\u064A\u062E)\s*[:\u061B\u003A\uFE55]?\s*[\.\/\-\u2026]{2,}/gu, (_m, g1) => `${g1} ${octroiDate}`);
+    }
+    // Code number in "السند المنجمي رقم TEM....."
+    const typeCode = String((initialData?.typePermis?.code || (initialData?.typePermis as any)?.Code || '') || '').toUpperCase();
+    const codeNum = String((initialData as any)?.code_demande || (initialData as any)?.codeDemande || '').trim();
+    const fullCode = `${typeCode}${codeNum}`;
+    if (fullCode) {
+      combined = combined.replace(/(\u0627\u0644\u0633\u0646\u062F\s+\u0627\u0644\u0645\u0646\u062C\u0645\u064A\s+\u0631\u0642\u0645)\s+[A-Z]+\s*[\.\u2026]{2,}/u, (_m, g1) => `${g1} ${fullCode}`);
+      combined = combined.replace(/(\u0631\u0642\u0645)\s+[A-Z]+\s*[\.\u2026]{2,}/u, (_m, g1) => `${g1} ${fullCode}`);
+    }
+    // Substance
+    if (substance) {
+      combined = combined.replace(/(\u0644\u0645\u0627\u062F\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${substance}`);
+      combined = combined.replace(/(\u0627\u0644\u0645\u0627\u062F\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${substance}`);
+    }
+    // Location phrase segments
+    if (lieuDitStr) combined = combined.replace(/(\u0627\u0644\u0645\u0633\u0645\u0649)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${lieuDitStr}`);
+    if (communeStr) combined = combined.replace(/(\u0628\u0644\u062F\u064A\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${communeStr}`);
+    if (dairaStr) combined = combined.replace(/(\u062F\u0627\u0626\u0631\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${dairaStr}`);
+    if (wilayaStr) combined = combined.replace(/(\u0648\u0644\u0627\u064A\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${wilayaStr}`);
+
+    const h = wrapH(combined, contentWidth - padding * 2, baseFont, ARABIC_FONTS[0], baseLH);
+    builtIntro.push({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: contentWidth - padding * 2, text: combined, language: 'ar', direction: 'rtl', fontSize: baseFont, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right', opacity: 1, rotation: 0, wrap: 'word', lineHeight: baseLH, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any);
+    yCursor += h + (isTXC ? 4 : 6);
+  });
+
+    // Decision header
+    const decisionItem = idToItem.get('decision');
+    if (decisionItem) {
+      const text = (decisionItem.title || '').trim() || 'يــقــرر مــا يــلــي :';
+      const fz = Math.max(baseFont + 4, 22);
+      const lh = 1.2;
+      const h = wrapH(text, contentWidth - padding * 2, fz, ARABIC_FONTS[0], lh);
+      builtIntro.push({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: contentWidth - padding * 2, text, language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center', opacity: 1, rotation: 0, wrap: 'word', lineHeight: lh, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any);
+      yCursor += h + (isTXC ? 4 : 6);
+    }
+
+    // Combined block after decision
+    let combinedText = '';
+    const styledRanges: any[] = [];
+    let acc = 0;
+
+    afterIds.forEach((id, idx) => {
+      const el = idToItem.get(id)!;
+      const title = (el.title || '').trim();
+      const hasColon = /[:ï¼š]$/.test(title);
+      const titlePrefix = title ? (hasColon ? title : `${title} :`) : '';
+      let piece = [titlePrefix, el.content || ''].filter(Boolean).join(' ');
+      // Replace generic dotted beneficiary placeholder: يمنح .......... -> يمنح <beneficiaryText>
+      if (beneficiaryText) {
+        piece = piece.replace(/(\u064A\u0645\u0646\u062D)\s*[\.\u2026_]{2,}/gu, (_m, g1) => `${g1} ${beneficiaryText}`);
+      }
+      // Replace expiration date placeholder after "إلى غاية" like ../../....
+      if (expDate) {
+        piece = piece.replace(/(\u0625\u0644\u0649\s+\u063A\u0627\u064A\u0629)\s*[\.\/\-\u2026]{2,}/gu, (_m, g1) => `${g1} ${expDate}`);
+      }
+      // Replace registered/on date placeholders: only fill "المسجل بتاريخ …" and
+      // for "المؤرخ في …" only when referring to the mining title line containing "سند/السند"
+      if (octroiDate) {
+        piece = piece.replace(/(\u0627\u0644\u0645\u0633\u062C[\u064B-\u0652]?\u0644\s+\u0628\u062A\u0627\u0631\u064A\u062E)\s*[:\u061B\u003A\uFE55]?\s*[\.\/\-\u2026]{2,}/gu, (_m, g1) => `${g1} ${octroiDate}`);
+        if (/\u0633\u0646\u062F|\u0627\u0644\u0633\u0646\u062F/.test(piece)) {
+          piece = piece.replace(/(\u0627\u0644\u0645\u0624\u0631\u062E(?:\u0629)?\s+\u0641\u064A)\s*[:\u061B\u003A\uFE55]?\s*[\.\/\-\u2026]{2,}/gu, (_m, g1) => `${g1} ${octroiDate}`);
+        }
+      }
+      // Replace material placeholder: "لمادة ...." or "المادة ...." with substance
+      if (substance) {
+        piece = piece.replace(/(\u0644\u0645\u0627\u062F\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${substance}`);
+        piece = piece.replace(/(\u0627\u0644\u0645\u0627\u062F\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${substance}`);
+      }
+      // Replace location placeholders in the long phrase
+      if (lieuDitStr) {
+        piece = piece.replace(/(\u0627\u0644\u0645\u0633\u0645\u0649)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${lieuDitStr}`);
+      }
+      if (communeStr) {
+        piece = piece.replace(/(\u0628\u0644\u062F\u064A\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${communeStr}`);
+      }
+      if (dairaStr) {
+        piece = piece.replace(/(\u062F\u0627\u0626\u0631\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${dairaStr}`);
+      }
+      if (wilayaStr) {
+        piece = piece.replace(/(\u0648\u0644\u0627\u064A\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${wilayaStr}`);
+      }
+      // Replace area placeholder: "تقدر المساحة الممنوحة بـ .."
+      if (String((initialData as any)?.superficie || '').trim()) {
+        const supStr = `${(initialData as any)?.superficie} `;
+        piece = piece.replace(/(\u062A\u0642\u062F\u0631\s+\u0627\u0644\u0645\u0633\u0627\u062D\u0629\s+\u0627\u0644\u0645\u0645\u0646\u0648\u062D\u0629\s+\u0628\u0640)\s*[\.\u2026]{1,}/gu, (_m, g1) => `${g1} ${supStr}`);
+      }
+      const prepend = (idx === 0) ? '' : '\n';
+      combinedText += prepend + piece;
+      if (titlePrefix) {
+        const start = acc + (prepend ? 1 : 0);
+        const end = start + titlePrefix.length;
+        styledRanges.push({ start, end, fontWeight: 'bold', underline: true });
+      }
+      acc = combinedText.length;
+    });
+
+    const combinedH = wrapH(combinedText, contentWidth - padding * 2, baseFont, ARABIC_FONTS[0], baseLH);
+    const footerReserve = 110; // slightly smaller to avoid over-shrinking fonts
+    const available = Math.max(60, (size.height - bottomMargin - footerReserve) - yCursor);
+    const innerW = contentWidth - padding * 2;
+    // Fit by reducing font size (not width) so text uses full width up to border
+    let fitFont = baseFont;
+    let fitLH = baseLH;
+    // Keep fonts from becoming too small when switching templates
+    const minFont = Math.max(baseFont - 2, isTXC ? 18 : 22);
+    const minLH = 1.2;
+    let neededH = combinedH;
+    while (neededH > available && fitFont > minFont) {
+      fitFont -= 1;
+      neededH = wrapH(combinedText, innerW, fitFont, ARABIC_FONTS[0], fitLH);
+    }
+    while (neededH > available && fitLH > minLH) {
+      fitLH = Math.max(minLH, Math.round((fitLH - 0.05) * 100) / 100);
+      neededH = wrapH(combinedText, innerW, fitFont, ARABIC_FONTS[0], fitLH);
+    }
+    const combinedEl = combinedText ? ({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: innerW, text: combinedText, language: 'ar', direction: 'rtl', fontSize: fitFont, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right', opacity: 1, rotation: 0, wrap: 'word', lineHeight: fitLH, styledRanges, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any) : null;
+
+    setPages(prev => {
+      let next = [...prev] as PermisPages;
+      while (next.length < PAGES.ARTICLES + 1) {
+        const base = canvasSizes[PAGES.ARTICLES] || { width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height };
+        next.push(createArticlesPage(initialData, base));
+      }
+      if (next.length > PAGES.ARTICLES + 1) next = next.slice(0, PAGES.ARTICLES + 1);
+      const absIdx = PAGES.ARTICLES;
+      const keep = (next[absIdx] || []).filter(el => (el as any).meta?.isBorder || (el as any).meta?.isHeader || (el as any).meta?.isGrid);
+      const pageEls: PermisElement[] = [...keep, ...builtIntro];
+      if (combinedEl) pageEls.push(combinedEl);
+      // Footer signatures and location on bottom of page 2
+      const rightWidth = 260;
+      const rightX = size.width - rightWidth - (isTXC ? 24 : 40);
+      const signatureTop = size.height - 110;
+      const signatureSpacing = 36;
+      const centerWidth = 600;
+      const centerX = (size.width - centerWidth) / 2;
+      const footerEls: PermisElement[] = [
+        {
+          id: uuidv4(),
+          type: 'text',
+          x: rightX,
+          y: signatureTop,
+          width: rightWidth,
+          text: 'رئـيس اللجنة المديرة',
+          language: 'ar',
+          direction: 'rtl',
+          fontSize: 24,
+          fontFamily: ARABIC_FONTS[0],
+          color: '#000',
+          draggable: true,
+          textAlign: 'right',
+          opacity: 1,
+          wrap: 'none',
+          lineHeight: 1.2,
+          meta: { isFooter: true, pageIndex: absIdx }
+        } as any,
+        {
+          id: uuidv4(),
+          type: 'text',
+          x: rightX,
+          y: signatureTop + signatureSpacing,
+          width: rightWidth,
+          text: 'مراد حنيفي',
+          language: 'ar',
+          direction: 'rtl',
+          fontSize: 24,
+          fontFamily: ARABIC_FONTS[0],
+          color: '#000',
+          draggable: true,
+          textAlign: 'right',
+          opacity: 1,
+          wrap: 'none',
+          lineHeight: 1.2,
+          meta: { isFooter: true, pageIndex: absIdx }
+        } as any,
+        {
+          id: uuidv4(),
+          type: 'text',
+          x: centerX,
+          y: signatureTop + signatureSpacing,
+          width: centerWidth,
+          text: 'حـرر بالـجزائـر في:',
+          language: 'ar',
+          direction: 'rtl',
+          fontSize: 24,
+          fontFamily: ARABIC_FONTS[0],
+          color: '#000',
+          draggable: true,
+          textAlign: 'center',
+          opacity: 1,
+          wrap: 'none',
+          lineHeight: 1.2,
+          meta: { isFooter: true, pageIndex: absIdx }
+        } as any,
+      ];
+      next[absIdx] = [...pageEls, ...footerEls];
+      pushHistory(JSON.parse(JSON.stringify(next)) as PermisPages);
+      return next;
+    });
+    setCanvasSizes(prev => {
+      let sizes = [...prev];
+      while (sizes.length < PAGES.ARTICLES + 1) sizes.push(sizes[PAGES.ARTICLES] || { width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height });
+      if (sizes.length > PAGES.ARTICLES + 1) sizes = sizes.slice(0, PAGES.ARTICLES + 1);
+      return sizes;
+    });
+    return; // done single-page combined mode
+  }
+
   articleIds.forEach((articleId) => {
     const article = source.find(a => a.id === articleId);
     if (!article) return;
@@ -523,7 +827,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       textAlign: 'right',
       direction: 'rtl',
       fontSize: isTXC ? 18 : 24,
-      lineHeight: isTXC ? 1.4 : 1.8,
+      lineHeight: isTXC ? 1.3 : 1.7,
       padding: padding,
       spacing: 0,
     });
@@ -543,7 +847,8 @@ function createCornerDecorations(color: string, width: number, height: number): 
         const txt = String((el as any).text || '');
         const ci = txt.indexOf(':');
         // Only underline if looks like a title (starts with المادة ...:)
-        if (ci > 0 && /\u0627\u0644\u0645\u0627\u062F\u0629/.test(txt.slice(0, ci))) {
+        const hasStyledUnderline = Array.isArray((el as any).styledRanges) && (el as any).styledRanges.some((r: any) => r.underline && r.start <= ci && r.end >= Math.max(0, ci));
+        if (!hasStyledUnderline && ci > 0 && /\u0627\u0644\u0645\u0627\u062F\u0629/.test(txt.slice(0, ci))) {
           const titlePart = txt.slice(0, ci + 1);
           const fz = (el as any).fontSize || 24;
           const lh = (el as any).lineHeight || 1.8;
@@ -581,7 +886,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
         const lineH = (el.lineHeight || 1.8);
         const text = String(el.text || '');
         const boxW = Math.max(10, el.width || (contentWidth - padding *2));
-        // Slightly smaller average character width to avoid overestimating text height
+        // Use a larger average character width for Arabic to reduce overestimation
         const avgCharsPerLine = Math.max(1, Math.floor(boxW / (fontSize * 0.42)));
         const parts = text.split(/\r?\n/);
         let totalLines = 0;
@@ -796,13 +1101,16 @@ function createCornerDecorations(color: string, width: number, height: number): 
           const loadedArticles = await getArticlesForSet(defKey);
           if (!mounted) return;
           setArticles(loadedArticles);
+          // First set base pages, then insert articles to avoid being overwritten
+          const initSnap = JSON.parse(JSON.stringify(initialPages)) as PermisPages;
+          setPages(initSnap);
+          pushHistory(initSnap);
           const preselected = loadedArticles.filter(a => (a as any).preselected).map(a => a.id);
-          setSelectedArticleIds(preselected);
-          if (preselected.length) {
-            insertArticlesAsElements(preselected, loadedArticles);
+          const effectiveIds = preselected.length ? preselected : loadedArticles.map(a => a.id);
+          setSelectedArticleIds(effectiveIds);
+          if (effectiveIds.length) {
+            insertArticlesAsElements(effectiveIds, loadedArticles);
           }
-          setPages(JSON.parse(JSON.stringify(initialPages)));
-          pushHistory(JSON.parse(JSON.stringify(initialPages)));
         } else {
           if (!mounted) return;
           setTemplates([]);
@@ -822,6 +1130,9 @@ function createCornerDecorations(color: string, width: number, height: number): 
           getArticlesForSet(defKey).then(a => {
             if (!mounted) return;
             setArticles(a);
+            const pre = a.filter(x => (x as any).preselected).map(x => x.id);
+            setSelectedArticleIds(pre);
+            if (pre.length) insertArticlesAsElements(pre, a);
           }).catch(() => {});
         }
       } catch (err) {
@@ -844,6 +1155,9 @@ function createCornerDecorations(color: string, width: number, height: number): 
         getArticlesForSet(defKey).then(a => {
           if (!mounted) return;
           setArticles(a);
+          const pre = a.filter(x => (x as any).preselected).map(x => x.id);
+          setSelectedArticleIds(pre);
+          if (pre.length) insertArticlesAsElements(pre, a);
         }).catch(() => {});
       }
     };
@@ -931,11 +1245,9 @@ function createCornerDecorations(color: string, width: number, height: number): 
 
   const generateQRCodeData = (data: any, codeOverride?: string): string => {
     const baseUrl = 'https://pom.anam.gov.dz/';
+    // Preserve existing value (often alphanumeric code) but publish under the 'id' param name
     const code = (codeOverride && String(codeOverride)) || String(data?.code_demande || data?.codeDemande || '');
-    // Keep URL short; include just a code param and type
-    const params = new URLSearchParams({
-      code,
-    });
+    const params = new URLSearchParams({ id: code });
     return `${baseUrl}?${params.toString()}`;
   };
 
@@ -998,17 +1310,17 @@ function createCornerDecorations(color: string, width: number, height: number): 
     const els: PermisElement[] = [];
 
     // Logo (ANAM) on the top-left
-    els.push({ id: uuidv4(), type: 'image', x: 38, y: 34, width: 110, height: 90, draggable: false, src: '/logo.png' } as any);
+    els.push({ id: uuidv4(), type: 'image', x: 38, y: 34, width: 118, height: 119, draggable: false, src: '/logo.png' } as any);
 
     // Bilingual header centered horizontally with padding between lines
     const headerWidth = 480;
     const headerX = (DEFAULT_CANVAS.width - headerWidth) / 2;
     const headerY1 = 28;
     const headerPad = 36; // vertical spacing between header lines
-    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1, width: headerWidth, text: 'الجمهورية الجزائرية الديمقراطية الشعبية', language: 'ar', direction: 'rtl', fontSize: 31, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center', opacity: 1 });
-    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1 + headerPad, width: headerWidth, text: "People's Democratic Republic of Algeria", fontSize: 22, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center', opacity: 1 });
-    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1 + headerPad * 2, width: headerWidth, text:' وزارة المحــروقــات والمنــاجــم', language: 'ar', direction: 'rtl', fontSize: 26, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' });
-    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1 + headerPad * 3, width: headerWidth, text: 'الوكالة الوطنية للنشاطات المنجمية', language: 'ar', direction: 'rtl', fontSize: 26, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' });
+    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1, width: headerWidth, text: 'الجمهورية الجزائرية الديمقراطية الشعبية', language: 'ar', direction: 'rtl', fontSize: 32, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center', opacity: 1 });
+    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1 + headerPad, width: headerWidth, text: "People's Democratic Republic of Algeria", fontSize: 24, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center', opacity: 1 });
+    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1 + headerPad * 2, width: headerWidth, text:' وزارة المحــروقــات والمنــاجــم', language: 'ar', direction: 'rtl', fontSize: 32, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' });
+    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1 + headerPad * 3, width: headerWidth, text: 'الوكالة الوطنية للنشاطات المنجمية', language: 'ar', direction: 'rtl', fontSize: 32, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' });
     // Thin rule
     //els.push({ id: uuidv4(), type: 'line', x: 60, y: 134, width: 680, height: 0, stroke: '#000', strokeWidth: 1, draggable: false });
 
@@ -1094,6 +1406,8 @@ function createCornerDecorations(color: string, width: number, height: number): 
         let phrase = '';
         if (y === 1) {
           phrase = `1 \u0633\u0646\u0629`;
+        } else if (y > 10) {
+          phrase = `${y} \u0633\u0646\u0629`;
         } else {
           phrase = `${y} \u0633\u0646\u0648\u0627\u062A`;
         }
@@ -1140,6 +1454,8 @@ function createCornerDecorations(color: string, width: number, height: number): 
       let phrase = '';
       if (y === 1) {
         phrase = `1 \u0633\u0646\u0629`;
+      } else if (y > 10) {
+        phrase = `${y} \u0633\u0646\u0629`;
       } else {
         phrase = `${y} \u0633\u0646\u0648\u0627\u062A`;
       }
@@ -1242,7 +1558,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
     const estimateHeight = (text: string, widthPx: number, fontSize: number, lineHeight: number): number => {
       const s = String(text || '');
       if (!s) return fontSize * lineHeight;
-      const avgCharW = fontSize * 0.42;
+      const avgCharW = fontSize * 0.32;
       const perLine = Math.max(1, Math.floor((widthPx - 2) / Math.max(1, avgCharW)));
       const parts = s.split(/\r?\n/);
       let lines = 0;
@@ -1286,7 +1602,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       y += Math.ceil(h) + 6;
     };
     // Details: unified block for labels/values (single multi-line text)
-const detailsFontSize = 26;
+const detailsFontSize = 30;
     const detailsLineHeight = 1.55;
     const dotPlaceholder = '....................';
     // Substance (Arabic) from server data
@@ -1303,7 +1619,11 @@ const detailsFontSize = 26;
    // const label1Unified = 'يُمنـــح إلى: الشركة ذات المسؤولية المحدودة';
     const label2Unified = 'الموقع: ولايــة';
     const label3Unified = 'المساحة:';
-    const labelSubUnified = 'المــادة المرخّصة:';
+    // Build clean label without dots using type code mapping (prospection/exploration => باستكشافها)
+    const typeCodeForSub = String((initialData?.typePermis?.code || (initialData?.typePermis as any)?.Code || '') || '').toUpperCase();
+    const explorationCodes2 = new Set(['AP','PE','PPM','PEM','PEC']);
+    const isExplorationType = explorationCodes2.has(typeCodeForSub);
+    const labelSubUnified = isExplorationType ? 'لمــادة المُرخص باستكشافها:' : 'المــادة المُرخص باستغلالها:';
     const label4Unified = 'المــدة:';
     const linesUnified = [
       `${labelGrant} ${value1Display || dotPlaceholder}`.trim(),
@@ -1362,7 +1682,7 @@ const detailsFontSize = 26;
         blockCols,
         colWidths: baseColWidths,
         tableFontFamily: ARABIC_FONTS[0],
-        tableFontSize: 14,
+        tableFontSize: 18,
         tableTextAlign: 'right',
         headerTextAlign: 'center',
         showCellBorders: true,
@@ -1399,7 +1719,7 @@ const detailsFontSize = 26;
         els.push({ id: uuidv4(), type: 'line', x: bandX, y: topY2, width: bandW, height: 0, stroke: '#000', strokeWidth: 1.2, draggable: true } as any);
         // Title text centered between doubles
         const noticeText = `سند منجمي مسجل في السجل المنجمي تحت رقم : ${LRM}${code} ${LRM}${typeCode}`;
-        const noticeFontSize = 32;
+        const noticeFontSize = 35;
     els.push({ id: uuidv4(), type: 'text', x: bandX, y: textY, width: bandW, text: noticeText, language: 'ar', direction: 'rtl', fontSize: noticeFontSize, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
         
         // Dynamic diagonal line starting from the left edge of the page band under the sentence to the bottom-left corner
@@ -1887,6 +2207,109 @@ const detailsFontSize = 26;
   const handleTextChange = useCallback((id: string, newText: string) => {
     setElementsForCurrent(prev => prev.map(el => (el.id === id && el.type === 'text' ? { ...el, text: newText } : el)));
   }, [setElementsForCurrent]);
+
+  // Inline selection styling: bold toggle and font size adjustments on the open text editor
+  const applySelectionStyle = useCallback((opts: { toggleBold?: boolean; toggleUnderline?: boolean; fontSizeDelta?: number }) => {
+    if (!textOverlay) return;
+    const { id, value, selectionStart = 0, selectionEnd = 0 } = textOverlay;
+    const start0 = Math.min(selectionStart || 0, selectionEnd || 0);
+    const end0 = Math.max(selectionStart || 0, selectionEnd || 0);
+    // Expand zero-length selection to nearest word for convenience
+    const expandToWord = (text: string, i: number) => {
+      if (!text) return [0, 0] as [number, number];
+      let l = i, r = i;
+      const isWord = (ch: string) => /[\p{L}\p{N}_’'\-]/u.test(ch);
+      while (l > 0 && isWord(text[l - 1])) l--;
+      while (r < text.length && isWord(text[r])) r++;
+      return [l, r] as [number, number];
+    };
+    const [start, end] = (start0 === end0) ? expandToWord(value, start0) : [start0, end0];
+    if (start >= end) return;
+
+    setPages(prev => {
+      const next = [...prev] as PermisPages;
+      const pageArr = next[currentPage] || [];
+      const idx = pageArr.findIndex(el => el.id === id && el.type === 'text');
+      if (idx === -1) return prev;
+      const el = pageArr[idx];
+      const baseFont = (el.fontSize || 20);
+      const ranges = Array.isArray(el.styledRanges) ? [...el.styledRanges] : [];
+
+      // Determine if selection is already bold across all characters
+      const isBoldEverywhere = (() => {
+        for (let i = start; i < end; i++) {
+          const r = ranges.find(rg => rg.start <= i && rg.end > i);
+          const w = r?.fontWeight || 'normal';
+          if (w !== 'bold') return false;
+        }
+        return ranges.length > 0; // require at least one styled segment
+      })();
+      const isUnderlineEverywhere = (() => {
+        for (let i = start; i < end; i++) {
+          const r = ranges.find(rg => rg.start <= i && rg.end > i);
+          const u = !!r?.underline;
+          if (!u) return false;
+        }
+        // at least one styled segment must exist to consider it
+        return ranges.length > 0;
+      })();
+
+      const applyTransform = (seg?: { fontWeight?: 'bold'|'normal'; fontSize?: number }) => seg;
+
+      const transformed: typeof ranges = [];
+      // Split and transform touching ranges
+      for (const rg of ranges) {
+        if (rg.end <= start || rg.start >= end) {
+          // No overlap
+          transformed.push({ ...rg });
+          continue;
+        }
+        // left part
+        if (rg.start < start) transformed.push({ ...rg, end: start });
+        // middle part (selection)
+        const middle: any = { ...rg, start: Math.max(start, rg.start), end: Math.min(end, rg.end) };
+        if (opts.toggleBold) {
+          middle.fontWeight = isBoldEverywhere ? 'normal' : 'bold';
+        }
+        if (opts.toggleUnderline) {
+          middle.underline = isUnderlineEverywhere ? false : true;
+        }
+        if (typeof opts.fontSizeDelta === 'number') {
+          const cur = typeof rg.fontSize === 'number' ? rg.fontSize : baseFont;
+          middle.fontSize = Math.max(8, Math.min(96, cur + opts.fontSizeDelta));
+        }
+        transformed.push(middle);
+        // right part
+        if (rg.end > end) transformed.push({ ...rg, start: end });
+      }
+      // If there were no ranges intersecting the selection, create a new one for it
+      if (!ranges.some(rg => !(rg.end <= start || rg.start >= end))) {
+        const middle: any = { start, end };
+        if (opts.toggleBold) middle.fontWeight = isBoldEverywhere ? 'normal' : 'bold';
+        if (opts.toggleUnderline) middle.underline = isUnderlineEverywhere ? false : true;
+        if (typeof opts.fontSizeDelta === 'number') middle.fontSize = Math.max(8, Math.min(96, baseFont + opts.fontSizeDelta));
+        transformed.push(middle);
+      }
+      // Merge adjacent ranges with identical styles
+      transformed.sort((a, b) => a.start - b.start);
+      const merged: typeof transformed = [];
+      for (const rg of transformed) {
+        if (!merged.length) { merged.push({ ...rg }); continue; }
+        const last = merged[merged.length - 1];
+        const sameWeight = (last.fontWeight || 'normal') === (rg.fontWeight || 'normal');
+        const sameSize = (last.fontSize || baseFont) === (rg.fontSize || baseFont);
+        const sameUnder = (!!(last as any).underline) === (!!(rg as any).underline);
+        if (last.end === rg.start && sameWeight && sameSize && sameUnder) {
+          last.end = rg.end;
+        } else {
+          merged.push({ ...rg });
+        }
+      }
+      next[currentPage] = pageArr.map((e, i) => i === idx ? ({ ...e, styledRanges: merged }) as any : e);
+      pushHistory(JSON.parse(JSON.stringify(next)) as PermisPages);
+      return next;
+    });
+  }, [textOverlay, currentPage, setPages, pushHistory]);
 
   const handleAddElement = useCallback((type: 'text' | 'rectangle' | 'image' | 'line') => {
     const newElement: PermisElement = {
@@ -2469,11 +2892,123 @@ const detailsFontSize = 26;
 
   const commitTextEditor = useCallback((save: boolean) => {
     if (!textOverlay) return;
-    if (save) handleTextChange(textOverlay.id, textOverlay.value);
+    if (save) {
+      const { id, value } = textOverlay;
+      setPages(prev => {
+        const next = [...prev] as PermisPages;
+        const arr = next[currentPage] || [];
+        // Table cell edit
+        if (id.startsWith('table:')) {
+          const parts = id.split(':');
+          const tblId = parts[1];
+          const rowIndex = parseInt(parts[2], 10);
+          const colKey = parts[3];
+          const tIdx = arr.findIndex(el => el.id === tblId && el.type === 'table');
+          if (tIdx === -1 || isNaN(rowIndex) || !colKey) return prev;
+          const tel = arr[tIdx] as any;
+          const data = Array.isArray(tel.tableData) ? tel.tableData.slice() : [];
+          while (data.length <= rowIndex) data.push({});
+          const row = { ...(data[rowIndex] || {}) };
+          row[colKey] = value;
+          data[rowIndex] = row;
+          arr[tIdx] = { ...tel, tableData: data } as any;
+          next[currentPage] = arr;
+          pushHistory(JSON.parse(JSON.stringify(next)) as PermisPages);
+          return next;
+        }
+        // Text element edit
+        const idx = arr.findIndex(el => el.id === id && el.type === 'text');
+        if (idx === -1) return prev;
+        const el = arr[idx];
+        // Adjust styled ranges to account for the text edit using a simple prefix/suffix diff
+        const oldText = String(el.text || '');
+        const newText = String(value || '');
+        let p = 0;
+        while (p < oldText.length && p < newText.length && oldText[p] === newText[p]) p++;
+        let s = 0;
+        while (
+          s < (oldText.length - p) &&
+          s < (newText.length - p) &&
+          oldText[oldText.length - 1 - s] === newText[newText.length - 1 - s]
+        ) s++;
+        const oldMidStart = p;
+        const oldMidEnd = oldText.length - s;
+        const newMidLen = Math.max(0, newText.length - p - s);
+        const delta = newMidLen - Math.max(0, oldMidEnd - oldMidStart);
+
+        let ranges = Array.isArray(el.styledRanges) ? el.styledRanges.map(r => ({...r})) : [] as any[];
+        const adjusted: any[] = [];
+        for (const r of ranges) {
+          // entirely before change
+          if (r.end <= oldMidStart) { adjusted.push({ ...r }); continue; }
+          // entirely after change
+          if (r.start >= oldMidEnd) { adjusted.push({ ...r, start: r.start + delta, end: r.end + delta }); continue; }
+          // overlaps the changed region
+          // left preserved part
+          if (r.start < oldMidStart) {
+            adjusted.push({ ...r, end: Math.min(r.end, oldMidStart) });
+          }
+          // right preserved part
+          if (r.end > oldMidEnd) {
+            const rightStartOld = Math.max(r.start, oldMidEnd);
+            const newStartBase = oldMidStart + newMidLen; // where the oldMidEnd maps to in new text
+            const newStart = newStartBase + (rightStartOld - oldMidEnd);
+            const newEnd = newStartBase + (r.end - oldMidEnd);
+            adjusted.push({ ...r, start: newStart, end: newEnd });
+          }
+        }
+        // Clamp to new length and drop empties
+        const len = newText.length;
+        ranges = adjusted
+          .map(r => ({ start: Math.max(0, Math.min(r.start, len)), end: Math.max(0, Math.min(r.end, len)), fontWeight: r.fontWeight, fontSize: r.fontSize, color: r.color, underline: r.underline }))
+          .filter(r => r.end > r.start);
+        // Merge adjacent equal styles after clamp
+        ranges.sort((a,b) => a.start - b.start);
+        const merged: typeof ranges = [];
+        const baseFont = el.fontSize || 20;
+        for (const r of ranges) {
+          if (!merged.length) { merged.push({...r}); continue; }
+          const last = merged[merged.length-1];
+          const sameWeight = (last.fontWeight || 'normal') === (r.fontWeight || 'normal');
+          const sameSize = (last.fontSize || baseFont) === (r.fontSize || baseFont);
+          const sameColor = (last.color || el.color) === (r.color || el.color);
+          const sameUnder = !!last.underline === !!r.underline;
+          if (last.end === r.start && sameWeight && sameSize && sameColor && sameUnder) {
+            last.end = r.end;
+          } else {
+            merged.push({...r});
+          }
+        }
+        arr[idx] = { ...el, text: value, styledRanges: merged } as any;
+        next[currentPage] = arr;
+        pushHistory(JSON.parse(JSON.stringify(next)) as PermisPages);
+        return next;
+      });
+    }
     setTextOverlay(null);
-  }, [textOverlay, handleTextChange]);
+  }, [textOverlay, currentPage, setPages, pushHistory]);
 
   const onTextAreaKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      applySelectionStyle({ toggleBold: true });
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'u') {
+      e.preventDefault();
+      applySelectionStyle({ toggleUnderline: true });
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {
+      e.preventDefault();
+      applySelectionStyle({ fontSizeDelta: 2 });
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
+      e.preventDefault();
+      applySelectionStyle({ fontSizeDelta: -2 });
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       commitTextEditor(true);
@@ -2481,7 +3016,7 @@ const detailsFontSize = 26;
       e.preventDefault();
       commitTextEditor(false);
     }
-  }, [commitTextEditor]);
+  }, [commitTextEditor, applySelectionStyle]);
 
   const canPrev = currentPage > 0;
   const canNext = currentPage < pages.length - 1;
@@ -2826,6 +3361,37 @@ const pageLabel = (idx: number) => {
                       onTransformEnd={handleTransformEnd}
                       onDblClickText={() => openTextEditor(element)}
                       onTransform={handleTransform}
+                      onCellDblClick={({ element: tbl, rowIndex, colKey, local }) => {
+                        if (!containerRef.current) return;
+                        const containerRect = containerRef.current.getBoundingClientRect();
+                        const canvasPad = 20;
+                        const scaleX = (tbl.scaleX as number) || 1;
+                        const scaleY = (tbl.scaleY as number) || 1;
+                        const left = (tbl.x + local.x * scaleX) * zoom + containerRect.left + canvasPad;
+                        const top = (tbl.y + local.y * scaleY) * zoom + containerRect.top + canvasPad;
+                        const width = (local.width * scaleX) * zoom;
+                        const height = Math.max(36, (local.height * scaleY) * zoom);
+                        const data = Array.isArray((tbl as any).tableData) ? (tbl as any).tableData : [];
+                        const row = data[rowIndex] || {};
+                        const value = row[colKey] != null ? String(row[colKey]) : '';
+                        const baseFont = (tbl as any).tableFontSize || (tbl as any).fontSize || 18;
+                        setTextOverlay({
+                          id: `table:${tbl.id}:${rowIndex}:${colKey}`,
+                          value,
+                          left,
+                          top,
+                          width,
+                          height,
+                          fontSize: baseFont * zoom * scaleY,
+                          fontFamily: (tbl as any).tableFontFamily || (tbl as any).fontFamily || ARABIC_FONTS[0],
+                          color: '#000',
+                          direction: 'rtl',
+                          textAlign: 'right',
+                          lineHeight: 1.2,
+                          selectionStart: 0,
+                          selectionEnd: 0
+                        });
+                      }}
                     />
                   );
                 })}
@@ -2900,6 +3466,20 @@ const pageLabel = (idx: number) => {
                 overflowX: 'hidden',
               }}
             />
+          )}
+          {textOverlay && (
+            <div
+              className={styles.textOverlayToolbar}
+              style={{
+                left: (textOverlay.left || 0),
+                top: Math.max(8, (textOverlay.top || 0) - 40),
+              }}
+            >
+              <button onMouseDown={(e) => { e.preventDefault(); applySelectionStyle({ toggleBold: true }); }}><strong>B</strong></button>
+              <button onMouseDown={(e) => { e.preventDefault(); applySelectionStyle({ toggleUnderline: true }); }} style={{ textDecoration: 'underline' }}>U</button>
+              <button onMouseDown={(e) => { e.preventDefault(); applySelectionStyle({ fontSizeDelta: 2 }); }}>A+</button>
+              <button onMouseDown={(e) => { e.preventDefault(); applySelectionStyle({ fontSizeDelta: -2 }); }}>A-</button>
+            </div>
           )}
         </main>
         <aside className={styles.properties}>
@@ -3025,6 +3605,22 @@ const pageLabel = (idx: number) => {
               {firstSelected.type === 'table' && (
                 <>
                   <div className={styles.propRow}>
+                    <label>Table Font</label>
+                    <select
+                      value={(firstSelected as any).tableFontFamily || (firstSelected as any).fontFamily || ARABIC_FONTS[0]}
+                      onChange={(e) => handlePropertyChange('tableFontFamily', e.target.value)}
+                    >
+                      {Array.from(new Set([...(ARABIC_FONTS || []), ...(FONT_FAMILIES || [])])).map((font) => (
+                        <option key={font} value={font}>{font}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className={styles.propRow}>
+                    <label>Table Font Size</label>
+                    <input type="number" min={8} max={64} value={(firstSelected as any).tableFontSize ?? 18}
+                      onChange={(e) => handlePropertyChange('tableFontSize', Math.max(8, Math.min(64, parseInt(e.target.value || '17'))))} />
+                  </div>
+                  <div className={styles.propRow}>
                     <label>Header Text</label>
                     <input type="text" value={(firstSelected as any).headerText || ''} onChange={(e) => handlePropertyChange('headerText', e.target.value)} />
                   </div>
@@ -3075,6 +3671,14 @@ const pageLabel = (idx: number) => {
                   <div className={styles.propRow}>
                     <label>Header Align</label>
                     <select value={(firstSelected as any).headerTextAlign || 'center'} onChange={(e) => handlePropertyChange('headerTextAlign', e.target.value)}>
+                      <option value="left">Left</option>
+                      <option value="center">Center</option>
+                      <option value="right">Right</option>
+                    </select>
+                  </div>
+                  <div className={styles.propRow}>
+                    <label>Content Align</label>
+                    <select value={(firstSelected as any).tableTextAlign || 'center'} onChange={(e) => handlePropertyChange('tableTextAlign', e.target.value)}>
                       <option value="left">Left</option>
                       <option value="center">Center</option>
                       <option value="right">Right</option>

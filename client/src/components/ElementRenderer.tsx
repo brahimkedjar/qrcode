@@ -20,9 +20,10 @@ interface ElementRendererProps {
   onTransformEnd: (e: any) => void;
   onDblClickText: () => void;
   onTransform?: (e: any) => void;
+  onCellDblClick?: (info: { element: PermisElement; rowIndex: number; colKey: string; local: { x: number; y: number; width: number; height: number } }) => void;
 }
 
-export const ElementRenderer: React.FC<ElementRendererProps> = ({ element, isSelected, zoom, onClickElement, onDragEnd, onTransformEnd, onDblClickText, onTransform }) => {
+export const ElementRenderer: React.FC<ElementRendererProps> = ({ element, isSelected, zoom, onClickElement, onDragEnd, onTransformEnd, onDblClickText, onTransform, onCellDblClick }) => {
   if (element.type === 'text') {
     return (
       <TextElement
@@ -95,6 +96,7 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({ element, isSel
         onDragEnd={onDragEnd}
         onTransformEnd={onTransformEnd}
         onTransform={onTransform}
+        onCellDblClick={onCellDblClick}
       />
     );
   }

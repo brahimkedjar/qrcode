@@ -149,6 +149,15 @@ export class PermisService {
       (r as any).Substances ?? (r as any).SubstancesFR ?? (r as any).substance ?? (r as any).substance_fr ?? ''
     );
 
+    // Extract location details
+    const wilayaVal = toStr(
+      (r as any)[c.localisation] ??
+      (r as any).Wilaya ?? (r as any).wilaya ?? (r as any).idWilaya ?? ''
+    );
+    const communeVal = toStr((r as any).Commune ?? (r as any).commune ?? (r as any).idCommune ?? '');
+    const dairaVal = toStr((r as any).Daira ?? (r as any)['Daïra'] ?? (r as any).daira ?? '');
+    const lieuditVal = toStr((r as any).LieuDit ?? (r as any).lieudit ?? '');
+
     const val: any = {
       id: r[c.id],
       typePermis: typeData || toStr(r[c.typePermis]),
@@ -165,8 +174,14 @@ export class PermisService {
       dateCreation: r[c.dateCreation] ? new Date(r[c.dateCreation]).toISOString() : null,
       coordinates: await this.getCoordinatesByPermisId(String(r[c.id])).catch(() => []),
       duree_display_ar: dureeDisplayAr,
+      date_octroi_fr: fmtFr(dDebut),
+      date_expiration_fr: fmtFr(dFin),
       detenteur_ar: (detNorm && (detNorm.NomArab || detNorm.nom_ar)) || detData?.NomArab || detData?.nom_ar || '',
-      substance_ar: substanceResolved
+      substance_ar: substanceResolved,
+      wilaya: wilayaVal,
+      commune: communeVal,
+      daira: dairaVal,
+      lieudit: lieuditVal
     };
     // Add compatibility fields expected by designer
     val.code_demande = val.codeDemande;

@@ -12,6 +12,7 @@ interface TableElementProps {
   onDragEnd: (e: any) => void;
   onTransformEnd: (e: any) => void;
   onTransform?: (e: any) => void;
+  onCellDblClick?: (info: { element: PermisElement; rowIndex: number; colKey: string; local: { x: number; y: number; width: number; height: number } }) => void;
 }
 
 export const TableElement: React.FC<TableElementProps> = ({
@@ -21,6 +22,7 @@ export const TableElement: React.FC<TableElementProps> = ({
   onDragEnd,
   onTransformEnd,
   onTransform,
+  onCellDblClick,
 }) => {
   const groupRef = useRef<any>(null);
 
@@ -29,14 +31,14 @@ export const TableElement: React.FC<TableElementProps> = ({
     const rowHeight = Math.max(14, Number(element.rowHeight || 34));
     const baseColWidths = (element.colWidths && element.colWidths.length > 0) ? element.colWidths : [60, 90, 90];
     const headerText = element.headerText || '';
-    const headerHeight = Math.max(0, Number(element.headerHeight || 48));
+    const headerHeight = Math.max(0, Number(element.headerHeight || 28));
     const headerFill = element.headerFill || '#f5f5f5';
     const altRowFill = element.altRowFill || '#f8f8f8';
     const stroke = element.stroke || '#000';
     const strokeWidth = Number(element.strokeWidth || 1.2);
     const fontFamily = element.tableFontFamily || element.fontFamily || 'Arial';
-    const fontSize =17;
-    const textAlign = element.tableTextAlign || 'left';
+    const fontSize = Number((element as any).tableFontSize ?? (element as any).fontSize ?? 17);
+    const textAlign = (element as any).tableTextAlign || 'center';
     const data = Array.isArray(element.tableData) ? element.tableData : [];
     // Fit rows exactly to the dataset (no extra empty rows)
     const rowsPerCol = Math.max(1, Math.ceil((data.length || 1) / blockCols));
@@ -59,7 +61,7 @@ export const TableElement: React.FC<TableElementProps> = ({
     const scaledCols = columns.map(c => ({
       ...c,
       width: Math.max(10, Math.round((c.width || 0) * scale)),
-      align: c.align || 'center',
+      align: (c as any).align ?? textAlign,
     }));
     const blockW = scaledCols.reduce((a, b) => a + (b.width || 0), 0);
 
@@ -88,6 +90,7 @@ export const TableElement: React.FC<TableElementProps> = ({
       width: desiredWidth,
       height: desiredHeight,
       blockW,
+      showHeader: (element as any).showHeader !== false,
     } as const;
   }, [element]);
 
@@ -116,13 +119,14 @@ export const TableElement: React.FC<TableElementProps> = ({
 
   const totalRows = cfg.rowsPerCol;
   const headerY = 0;
-  const tableStartY = headerY + cfg.headerHeight;
+  const hasHeader = cfg.showHeader && cfg.headerHeight > 0;
+  const tableStartY = headerY + (hasHeader ? cfg.headerHeight : 0);
 
   const texts: React.ReactNode[] = [];
   const shapes: React.ReactNode[] = [];
 
   // Header band spanning full width
-  if (cfg.headerText && cfg.headerHeight > 0) {
+  if (hasHeader && cfg.headerText && cfg.headerHeight > 0) {
     shapes.push(
       <Rect key="hdr-bg" x={0} y={headerY} width={cfg.width} height={cfg.headerHeight} stroke={cfg.outerBorderColor} strokeWidth={cfg.outerBorderWidth} fill={cfg.headerFill} />
     );
@@ -148,28 +152,32 @@ export const TableElement: React.FC<TableElementProps> = ({
   for (let b = 0; b < cfg.blockCols; b++) {
     const bx = cfg.width - cfg.blockW * (b + 1);
     // Header row inside block
-    shapes.push(
-      <Rect key={`col-hdr-${b}`} x={bx} y={tableStartY} width={cfg.blockW} height={cfg.rowHeight} stroke={cfg.outerBorderColor} strokeWidth={cfg.outerBorderWidth} fill="#eeeeee" />
-    );
+    if (hasHeader) {
+      shapes.push(
+        <Rect key={`col-hdr-${b}`} x={bx} y={tableStartY} width={cfg.blockW} height={cfg.rowHeight} stroke={cfg.outerBorderColor} strokeWidth={cfg.outerBorderWidth} fill="#eeeeee" />
+      );
+    }
     // Vertical separators (height depends on rows in this block)
     let cx = bx;
     cfg.columns.forEach((col, cIdx) => {
       // column header text
-      texts.push(
-        <Text
-          key={`hdrtext-${b}-${cIdx}`}
-          x={cx}
-          y={tableStartY}
-          width={(col.width || 0)}
-          height={cfg.rowHeight}
-          text={String(col.title)}
-          fontSize={cfg.fontSize}
-          fontFamily={cfg.fontFamily}
-          fill="#000"
-          align={col.align || 'center'}
-          verticalAlign="middle"
-        />
-      );
+      if (hasHeader) {
+        texts.push(
+          <Text
+            key={`hdrtext-${b}-${cIdx}`}
+            x={cx}
+            y={tableStartY}
+            width={(col.width || 0)}
+            height={cfg.rowHeight}
+            text={String(col.title)}
+            fontSize={cfg.fontSize}
+            fontFamily={cfg.fontFamily}
+            fill="#000"
+            align={col.align || 'center'}
+            verticalAlign="middle"
+          />
+        );
+      }
       // vertical line after column
       cx += (col.width || 0);
       // Will draw after we know how many rows this block has
@@ -183,11 +191,11 @@ export const TableElement: React.FC<TableElementProps> = ({
     cfg.columns.forEach((col, cIdx) => {
       cx += (col.width || 0);
       shapes.push(
-        <Line key={`v-${b}-${cIdx}`} x={cx} y={tableStartY} points={[0, 0, 0, cfg.rowHeight * (rowsInBlock + 1)]} stroke={cfg.outerBorderColor} strokeWidth={cfg.outerBorderWidth} />
+        <Line key={`v-${b}-${cIdx}`} x={cx} y={tableStartY} points={[0, 0, 0, cfg.rowHeight * (rowsInBlock + (hasHeader ? 1 : 0))]} stroke={cfg.outerBorderColor} strokeWidth={cfg.outerBorderWidth} />
       );
     });
     for (let r = 0; r < rowsInBlock; r++) {
-      const ry = tableStartY + cfg.rowHeight * (r + 1);
+      const ry = tableStartY + cfg.rowHeight * (r + (hasHeader ? 1 : 0));
       const fill = r % 2 === 0 ? cfg.altRowFill : '#ffffff';
       shapes.push(
         <Rect key={`rowbg-${b}-${r}`} x={bx} y={ry} width={cfg.blockW} height={cfg.rowHeight} stroke="#cccccc" strokeWidth={0.5} fill={fill} />
@@ -218,6 +226,24 @@ export const TableElement: React.FC<TableElementProps> = ({
               fill="#000"
               align={col.align || 'center'}
               verticalAlign="middle"
+              onDblClick={(e) => {
+                e.cancelBubble = true;
+                onCellDblClick?.({
+                  element,
+                  rowIndex: idx,
+                  colKey: String(col.key || ''),
+                  local: { x: cx2, y: ry, width: (col.width || 0), height: cfg.rowHeight }
+                });
+              }}
+              onDblTap={(e) => {
+                e.cancelBubble = true;
+                onCellDblClick?.({
+                  element,
+                  rowIndex: idx,
+                  colKey: String(col.key || ''),
+                  local: { x: cx2, y: ry, width: (col.width || 0), height: cfg.rowHeight }
+                });
+              }}
             />
           );
           cx2 += (col.width || 0);
@@ -227,7 +253,7 @@ export const TableElement: React.FC<TableElementProps> = ({
       shapes.push(<Line key={`h-${b}-${r}`} x={bx} y={ry} points={[0, 0, cfg.blockW, 0]} stroke={cfg.gridColor} strokeWidth={cfg.gridWidth} />);
     }
     // Outer border for the block
-    shapes.push(<Rect key={`block-${b}`} x={bx} y={tableStartY} width={cfg.blockW} height={cfg.rowHeight * (rowsInBlock + 1)} stroke={cfg.outerBorderColor} strokeWidth={cfg.outerBorderWidth} fill="transparent" />);
+    shapes.push(<Rect key={`block-${b}`} x={bx} y={tableStartY} width={cfg.blockW} height={cfg.rowHeight * (rowsInBlock + (hasHeader ? 1 : 0))} stroke={cfg.outerBorderColor} strokeWidth={cfg.outerBorderWidth} fill="transparent" />);
   }
 
   return (

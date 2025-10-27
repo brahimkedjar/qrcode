@@ -36,21 +36,22 @@ export const toArticleElements = (options: {
   const elements: PermisElement[] = [];
   let currentY = options.yStart;
 
-  const joinTitleContent = (title?: string, content?: string) => {
+  const buildCombined = (title?: string, content?: string): { text: string; titleLen: number } => {
     const t = (title || '').trim();
     const c = (content || '').trim();
-    if (!t && !c) return '';
-    if (!t) return c;
-    if (!c) return t;
+    if (!t && !c) return { text: '', titleLen: 0 };
+    if (!t) return { text: c, titleLen: 0 };
+    if (!c) return { text: t, titleLen: t.length };
     const hasColon = /[:ï¼š]$/.test(t);
-    return `${t}${hasColon ? '' : ' :'} ${c}`;
+    const titlePrefix = hasColon ? t : `${t} :`;
+    return { text: `${titlePrefix} ${c}`, titleLen: titlePrefix.length };
   };
 
   options.articleIds.forEach(articleId => {
     const article = options.articles.find(a => a.id === articleId);
     if (!article) return;
 
-    const textCombined = joinTitleContent(article.title, article.content);
+    const { text: textCombined, titleLen } = buildCombined(article.title, article.content);
     const blockHeight = calculateTextHeight(
       textCombined,
       options.width,
@@ -58,6 +59,7 @@ export const toArticleElements = (options: {
       options.lineHeight
     );
 
+    const styledRanges = (titleLen > 0) ? [{ start: 0, end: titleLen, fontWeight: 'bold', underline: true }] : undefined as any;
     elements.push({
       id: uuidv4(),
       type: 'text',
@@ -75,7 +77,8 @@ export const toArticleElements = (options: {
       opacity: 1,
       rotation: 0,
       wrap: 'word',
-      lineHeight: options.lineHeight
+      lineHeight: options.lineHeight,
+      styledRanges
     });
 
     currentY += blockHeight + Math.max(2, options.spacing);

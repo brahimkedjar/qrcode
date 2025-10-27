@@ -205,6 +205,36 @@
   min-height: 36px;
 }
 
+/* Floating toolbar for inline text formatting */
+.textOverlayToolbar {
+  position: fixed;
+  z-index: 1210;
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid rgba(10,110,150,0.25);
+  box-shadow: 0 6px 20px rgba(2,6,23,0.10);
+}
+.textOverlayToolbar button {
+  height: 30px;
+  min-width: 30px;
+  border-radius: 6px;
+  border: 1px solid rgba(10,20,30,0.08);
+  background: #f9fafb;
+  cursor: pointer;
+  padding: 0 8px;
+}
+.textOverlayToolbar button:hover {
+  background: #eef6fb;
+}
+.textOverlayToolbar .active {
+  background: #0b6b95;
+  color: #fff;
+  border-color: #0b6b95;
+}
+
 /* Properties panel */
 .properties {
   width: 300px;
