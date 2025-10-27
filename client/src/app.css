@@ -1,3 +1,38 @@
 html, body, #root { height: 100%; margin: 0; }
 * { box-sizing: border-box; }
 
+/* Try to resolve Arabic fonts explicitly. If the local font exists, browser will use it.
+   If you place TTF/WOFF under client/public/fonts, browser can load them as webfonts. */
+@font-face {
+  font-family: 'Traditional Arabic';
+  src: local('Traditional Arabic'), local('TraditionalArabic'),
+       url('/fonts/TraditionalArabic.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Simplified Arabic';
+  src: local('Simplified Arabic'), local('SimplifiedArabic'),
+       url('/fonts/SimplifiedArabic.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Arabic Typesetting';
+  src: local('Arabic Typesetting'), local('ArabicTypesetting'),
+       url('/fonts/ArabicTypesetting.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Sakkal Majalla';
+  src: local('Sakkal Majalla'), local('SakkalMajalla'),
+       url('/fonts/SakkalMajalla.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+

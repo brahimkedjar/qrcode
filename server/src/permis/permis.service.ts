@@ -9,7 +9,8 @@ const DEFAULT_TABLES = {
   permis: process.env.ACCESS_TABLE_PERMIS || 'Titres',
   coordinates: process.env.ACCESS_TABLE_COORDINATES || 'coordonees',
   types: process.env.ACCESS_TABLE_TYPES || 'TypesTitres',
-  detenteur: process.env.ACCESS_TABLE_DETENTEUR || 'Detenteur'
+  detenteur: process.env.ACCESS_TABLE_DETENTEUR || 'Detenteur',
+  statutjuridique: process.env.ACCESS_TABLE_STATUTJURIDIQUE || 'statutjuridique'
 };
 
 // Map Access column names to API fields expected by the client
@@ -112,6 +113,23 @@ export class PermisService {
     }
 
     // Normalize detenteur payload to include Arabic/Latin names if available
+    // Resolve statut juridique (Arabic/FR) for detenteur if id is available
+    let statutNorm: any = null;
+    try {
+      const sjId = (detData as any)?.id_statutJuridique || (detData as any)?.idStatutJuridique || (detData as any)?.id_statut || (detData as any)?.statutJuridiqueId;
+      if (sjId != null && sjId !== '') {
+        const sj = await this.getStatutJuridiqueById(sjId).catch(() => null);
+        if (sj) {
+          statutNorm = {
+            id: (sj as any).id_statutJuridique ?? (sj as any).id ?? null,
+            Code: (sj as any).code_statut ?? (sj as any).Code ?? undefined,
+            Statut: (sj as any).statut_fr ?? (sj as any).Statut ?? (sj as any).statut ?? undefined,
+            StatutArab: (sj as any).statut_ar ?? (sj as any).StatutArab ?? (sj as any).statut_arabe ?? undefined,
+          };
+        }
+      }
+    } catch {}
+
     const detNorm = detData ? {
       id: detData.id ?? detData.Id ?? detData.ID ?? toStr(r[c.detenteur]),
       Nom: detData.Nom ?? detData.nom ?? detData.RaisonSociale ?? detData.raison_sociale ?? detData['Raison Sociale'] ?? detData.raisonSociale ?? detData.denomination ?? detData.nom_societe ?? detData.nom_societeFR ?? '',
@@ -120,8 +138,9 @@ export class PermisService {
       nom_societe: detData.nom_societe ?? detData.Nom ?? detData.nom ?? '',
       nom_ar: detData.nom_ar ?? detData.NomArab ?? detData.NomAR ?? '',
       raison_sociale: detData.raison_sociale ?? detData.RaisonSociale ?? detData['Raison Sociale'] ?? '',
-      // Include legal status verbatim when present
-      StatutJuridique: detData.StatutJuridique ?? detData.statutJuridique ?? detData.statut ?? ''
+      // Attach statut juridique if found; also project top-level fields for convenience
+      StatutJuridique: statutNorm || undefined,
+      StatutArab: (statutNorm && statutNorm.StatutArab) || undefined,
     } : null;
 
     const val: any = {
@@ -140,7 +159,8 @@ export class PermisService {
       dateCreation: r[c.dateCreation] ? new Date(r[c.dateCreation]).toISOString() : null,
       coordinates: await this.getCoordinatesByPermisId(String(r[c.id])).catch(() => []),
       duree_display_ar: dureeDisplayAr,
-      detenteur_ar: (detNorm && (detNorm.NomArab || detNorm.nom_ar)) || detData?.NomArab || detData?.nom_ar || ''
+      detenteur_ar: (detNorm && (detNorm.NomArab || detNorm.nom_ar)) || detData?.NomArab || detData?.nom_ar || '',
+      substance_ar: toStr((r as any).SubstancesArabe ?? (r as any).substances_arabe ?? (r as any).SubstancesAR ?? '')
     };
     // Add compatibility fields expected by designer
     val.code_demande = val.codeDemande;
@@ -193,6 +213,61 @@ export class PermisService {
     return { exists: true, permisId: Number(r.perm_id), permisCode: String(r.perm_code) };
   }
 
+  // Flexible search: accepts numeric id OR combined type+code like "PEC8375" or "pec 8375"
+  async searchPermis(query: string) {
+    const raw = String(query || '').trim();
+    if (!raw) return null;
+    // If purely numeric, treat as ID
+    if (/^\d+$/.test(raw)) {
+      return this.getPermisById(raw);
+    }
+    // Normalize combined input: remove spaces, uppercase
+    const flat = raw.replace(/\s+/g, '').toUpperCase();
+    const m = flat.match(/^([A-Z]+)(\d+)$/);
+    if (!m) return null;
+    const typeCode = m[1];
+    const codeNum = m[2];
+    const typesT = DEFAULT_TABLES.types;
+    const tc: any = DEFAULT_COLUMNS.types;
+    // Find type by code (case-insensitive)
+    const safeCodeExact = this.access.escapeValue(typeCode);
+    const safeCodeUpper = this.access.escapeValue(typeCode.toUpperCase());
+    let typeRows: any[] = [];
+    // Try exact match first
+    try { typeRows = await this.access.query(`SELECT TOP 1 * FROM ${typesT} WHERE ${tc.code} = ${safeCodeExact}`); } catch {}
+    // Try case-insensitive via UCase (Access SQL function)
+    if (!typeRows || !typeRows.length) {
+      try { typeRows = await this.access.query(`SELECT TOP 1 * FROM ${typesT} WHERE UCase(${tc.code}) = ${safeCodeUpper}`); } catch {}
+    }
+    if (!typeRows || !typeRows.length) return null;
+    const typeId = typeRows[0]?.[tc.id] ?? typeRows[0]?.id;
+    if (typeId == null) return null;
+    const t = DEFAULT_TABLES.permis;
+    const c: any = DEFAULT_COLUMNS.permis;
+    const pad5 = codeNum.padStart(5, '0');
+    const safePad = this.access.escapeValue(pad5);
+    const safeNum = this.access.escapeValue(codeNum);
+    const numN = Number(codeNum);
+    const typeCond = /^\d+$/.test(String(typeId)) ? String(typeId) : this.access.escapeValue(String(typeId));
+    // Try with both padded and raw numeric/text comparisons
+    let rows: any[] = [];
+    // Attempt 1: treat Code as numeric (no quotes)
+    if (!isNaN(numN)) {
+      const sqlNum = `SELECT TOP 1 * FROM ${t} WHERE ${c.typePermis} = ${typeCond} AND ${c.codeDemande} = ${String(numN)}`;
+      try { rows = await this.access.query(sqlNum); } catch {}
+    }
+    // Attempt 2: treat Code as text (with quotes, include padded and raw)
+    if (!rows || !rows.length) {
+      const whereText = `(${c.codeDemande} = ${safePad} OR ${c.codeDemande} = ${safeNum})`;
+      const sqlTxt = `SELECT TOP 1 * FROM ${t} WHERE ${c.typePermis} = ${typeCond} AND ${whereText}`;
+      try { rows = await this.access.query(sqlTxt); } catch {}
+    }
+    if (!rows || !rows.length) return null;
+    const idVal = rows[0]?.[c.id] ?? rows[0]?.id;
+    if (idVal == null) return null;
+    return this.getPermisById(String(idVal));
+  }
+
   private async getTypeById(typeId: any) {
     if (typeId == null || typeId === '') return null;
     const t = DEFAULT_TABLES.types;
@@ -223,6 +298,25 @@ export class PermisService {
     const rows = await this.access.query(sql);
     if (!rows.length) return null;
     return rows[0] as any;
+  }
+
+  private async getStatutJuridiqueById(statutId: any) {
+    if (statutId == null || statutId === '') return null;
+    const t = (DEFAULT_TABLES as any).statutjuridique;
+    const idVal = String(statutId);
+    const isNumeric = /^\d+$/.test(idVal);
+    // Try common id columns: id_statutJuridique, id
+    const candidates = [
+      `SELECT TOP 1 * FROM ${t} WHERE id_statutJuridique = ${isNumeric ? idVal : this.access.escapeValue(idVal)}`,
+      `SELECT TOP 1 * FROM ${t} WHERE id = ${isNumeric ? idVal : this.access.escapeValue(idVal)}`,
+    ];
+    for (const sql of candidates) {
+      try {
+        const rows = await this.access.query(sql);
+        if (rows && rows.length) return rows[0] as any;
+      } catch {}
+    }
+    return null;
   }
 
   private async ensureQrColumns() {

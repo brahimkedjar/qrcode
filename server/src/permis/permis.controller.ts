@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Post, Body, Req } from '@nestjs/common';
+import { Controller, Get, Param, Query, Post, Body } from '@nestjs/common';
 import { PermisService } from './permis.service';
 
 @Controller('permis')
@@ -15,6 +15,16 @@ export class PermisController {
       try { console.error('[verifyByQr] unexpected error:', (e as any)?.message || e); } catch {}
       return { exists: false };
     }
+  }
+
+  // Unified search endpoint: accepts numeric id or combined type+code like "PEC8375" (case-insensitive, spaces allowed)
+  // NOTE: must be declared BEFORE ':id' so it does not get captured as an id.
+  @Get('search')
+  async search(@Query('q') q?: string) {
+    const query = String(q || '').trim();
+    if (!query) return { exists: false };
+    const data = await this.permisService.searchPermis(query);
+    return data || { exists: false };
   }
 
   @Get(':id')
@@ -44,11 +54,8 @@ export class PermisController {
   }
 
   @Post(':id/qrcode/generate')
-  async generateQrForPermis(@Param('id') id: string, @Body() body?: any, @Req() req?: any) {
-    let by = body?.by || body?.user || body?.username || '';
-    if (!by && req?.headers) {
-      by = req.headers['x-user-id'] || req.headers['x-user-name'] || '';
-    }
-    return this.permisService.generateAndSaveQrCode(id, String(by || ''));
+  async generateQrForPermis(@Param('id') id: string, @Body() body?: any) {
+    const by = body?.by || body?.user || body?.username || '';
+    return this.permisService.generateAndSaveQrCode(id, by);
   }
 }

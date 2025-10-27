@@ -22,6 +22,13 @@ export const TextElement: React.FC<TextElementProps> = ({
   const textNodeRef = useRef<any>(null);
   const [textBounds, setTextBounds] = useState({ width: element.width || 240, height: element.height || 40 });
 
+  const safeFontFamily = (fam?: string) => {
+    if (!fam) return fam as any;
+    const trimmed = String(fam).trim();
+    if (/^['"].*['"]$/.test(trimmed)) return trimmed; // already quoted
+    return /\s/.test(trimmed) ? `"${trimmed}"` : trimmed;
+  };
+
   // Update bounds whenever text or style changes
   useEffect(() => {
     if (textNodeRef.current) {
@@ -81,7 +88,7 @@ export const TextElement: React.FC<TextElementProps> = ({
           y={0}
           text={element.text}
           fontSize={element.fontSize}
-          fontFamily={element.fontFamily}
+          fontFamily={safeFontFamily(element.fontFamily) as any}
           fontStyle={element.fontWeight === 'bold' ? 'bold' : 'normal'}
           fill={element.color}
           align={element.textAlign}
@@ -120,20 +127,20 @@ export const TextElement: React.FC<TextElementProps> = ({
                 if (substr) {
                   const fs = baseFontSize;
                   nodes.push(
-                    <Text key={`${element.id}-seg-${pos}`}
-                      x={xOff}
-                      y={yOff}
-                      text={substr}
-                      fontSize={fs}
-                      fontFamily={element.fontFamily}
-                      fill={element.color}
-                      align={element.textAlign}
-                      lineHeight={lh}
-                      wrap={'none'}
-                      listening={false}
-                      width={undefined as any}
-                    />
-                  );
+                  <Text key={`${element.id}-seg-${pos}`}
+                    x={xOff}
+                    y={yOff}
+                    text={substr}
+                    fontSize={fs}
+                    fontFamily={safeFontFamily(element.fontFamily) as any}
+                    fill={element.color}
+                    align={element.textAlign}
+                    lineHeight={lh}
+                    wrap={'none'}
+                    listening={false}
+                    width={undefined as any}
+                  />
+                );
                   xOff += estWidth(substr, fs);
                 }
                 pos = nextStart;
@@ -151,7 +158,7 @@ export const TextElement: React.FC<TextElementProps> = ({
                     y={yOff}
                     text={substr}
                     fontSize={fs}
-                    fontFamily={element.fontFamily}
+                    fontFamily={safeFontFamily(element.fontFamily) as any}
                     fontStyle={fontStyle as any}
                     textDecoration={textDecoration as any}
                     fill={range.color || element.color}

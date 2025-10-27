@@ -355,10 +355,12 @@ function createCornerDecorations(color: string, width: number, height: number): 
  
  const insertArticlesAsElements = useCallback((articleIds: string[], source: ArticleItem[]) => {
   // Single-column layout with automatic pagination
-  const marginX = 40;
+  const isTXC = (selectedArticleSet || '').toLowerCase().includes('txc');
+  let marginX = isTXC ? 24 : 40;
   const padding = 1;
-  const defaultArticleGap = 2; const decisionGap = 10;
-  const startY = 40;
+  let defaultArticleGap = isTXC ? 1 : 2; 
+  let decisionGap = isTXC ? 6 : 10;
+  let startY = isTXC ? 24 : 40;
   const bottomMargin = 20;
 
   // Helper to get size for a given absolute page index
@@ -417,6 +419,8 @@ function createCornerDecorations(color: string, width: number, height: number): 
       .replace(/\.{2,}\s*(?=المقدم\s+من\s+طرف)/g, `${holderDisplay} `);
   };
   const statutJuridique = pickFirstNonEmpty(
+    (initialData?.detenteur as any)?.StatutArab,
+    (initialData?.detenteur as any)?.StatutJuridique?.StatutArab,
     (initialData?.detenteur as any)?.StatutJuridique,
     (initialData?.detenteur as any)?.statutJuridique,
     (initialData?.detenteur as any)?.statut,
@@ -447,11 +451,11 @@ function createCornerDecorations(color: string, width: number, height: number): 
       yStart: 0,
       x: 0,
       width: contentWidth - padding * 2,
-      fontFamily: ARABIC_FONTS[1],
+      fontFamily: ARABIC_FONTS[0],
       textAlign: 'right',
       direction: 'rtl',
-      fontSize: 24,
-      lineHeight: 1.8,
+      fontSize: isTXC ? 18 : 24,
+      lineHeight: isTXC ? 1.4 : 1.8,
       padding: padding,
       spacing: 0,
     });
@@ -603,7 +607,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
           language: 'ar',
           direction: 'rtl',
           fontSize: 24,
-          fontFamily: ARABIC_FONTS[1],
+          fontFamily: ARABIC_FONTS[0],
           color: '#000',
           draggable: true,
           textAlign: 'center',
@@ -622,7 +626,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
           language: 'ar',
           direction: 'rtl',
           fontSize: 24,
-          fontFamily: ARABIC_FONTS[1],
+          fontFamily: ARABIC_FONTS[0],
           color: '#000',
           draggable: true,
           textAlign: 'center',
@@ -641,7 +645,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
           language: 'ar',
           direction: 'rtl',
           fontSize: 24,
-          fontFamily: ARABIC_FONTS[1],
+          fontFamily: ARABIC_FONTS[0],
           color: '#000',
           draggable: true,
           textAlign: 'right',
@@ -922,7 +926,6 @@ function createCornerDecorations(color: string, width: number, height: number): 
       return id != null ? String(id) : '';
     })();
     const holderDisplay = pickFirstNonEmpty(holderArabic, holderLatin, holderId);
-    const detenteurArabic = holderDisplay;
     console.log('sssssssssssssssssssssss',data)
     const els: PermisElement[] = [];
 
@@ -934,10 +937,10 @@ function createCornerDecorations(color: string, width: number, height: number): 
     const headerX = (DEFAULT_CANVAS.width - headerWidth) / 2;
     const headerY1 = 28;
     const headerPad = 36; // vertical spacing between header lines
-    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1, width: headerWidth, text: 'الجمهورية الجزائرية الديمقراطية الشعبية', language: 'ar', direction: 'rtl', fontSize: 31, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'center', opacity: 1 });
+    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1, width: headerWidth, text: 'الجمهورية الجزائرية الديمقراطية الشعبية', language: 'ar', direction: 'rtl', fontSize: 31, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center', opacity: 1 });
     els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1 + headerPad, width: headerWidth, text: "People's Democratic Republic of Algeria", fontSize: 22, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center', opacity: 1 });
-    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1 + headerPad * 2, width: headerWidth, text: 'وزارة الطاقة والمناجم', language: 'ar', direction: 'rtl', fontSize: 26, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'center' });
-    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1 + headerPad * 3, width: headerWidth, text: 'الوكالة الوطنية للنشاطات المنجمية', language: 'ar', direction: 'rtl', fontSize: 26, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'center' });
+    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1 + headerPad * 2, width: headerWidth, text:' وزارة المحــروقــات والمنــاجــم', language: 'ar', direction: 'rtl', fontSize: 26, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' });
+    els.push({ id: uuidv4(), type: 'text', x: headerX, y: headerY1 + headerPad * 3, width: headerWidth, text: 'الوكالة الوطنية للنشاطات المنجمية', language: 'ar', direction: 'rtl', fontSize: 26, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' });
     // Thin rule
     //els.push({ id: uuidv4(), type: 'line', x: 60, y: 134, width: 680, height: 0, stroke: '#000', strokeWidth: 1, draggable: false });
 
@@ -969,12 +972,13 @@ function createCornerDecorations(color: string, width: number, height: number): 
     // Center title inside the header band (no change to Arabic text)
     const centerBandW = Math.min(DEFAULT_CANVAS.width - 120, rectWidth - 40);
     const centerBandX = (DEFAULT_CANVAS.width - centerBandW) / 2;
-    els.push({ id: uuidv4(), type: 'text', x: centerBandX, y: boxY + 34, width: centerBandW, text: (__cleanTitleFromSet || permitTitle), language: 'ar', direction: 'rtl', fontSize: 42, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'center', fontWeight: 'bold', meta: { isMainTitle: true } });
+    els.push({ id: uuidv4(), type: 'text', x: centerBandX, y: boxY + 34, width: centerBandW, text: (__cleanTitleFromSet || permitTitle), language: 'ar', direction: 'rtl', fontSize: 42, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center', fontWeight: 'bold', meta: { isMainTitle: true } });
 
     // Number line centered
-    const numberLine = `رقم: ${code} ${typeCode}`.trim();
+    const LRM = '\u200e';
+    const numberLine = `رقم: ${LRM}${code} ${LRM}${typeCode}`.trim();
     // Center number line in the same band (no change to Arabic text)
-    els.push({ id: uuidv4(), type: 'text', x: centerBandX, y: boxY + Math.min(120, Math.max(70, Math.floor(boxH/2) + 30))-20, width: centerBandW, text: numberLine, language: 'ar', direction: 'rtl', fontSize: 38, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'center' });
+    els.push({ id: uuidv4(), type: 'text', x: centerBandX, y: boxY + Math.min(120, Math.max(70, Math.floor(boxH/2) + 30))-20, width: centerBandW, text: numberLine, language: 'ar', direction: 'rtl', fontSize: 38, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' });
 
      const parseAccessDate = (v: any): Date | null => {
       if (!v && v !== 0) return null;
@@ -1105,7 +1109,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       const ctx = ensureMeasureCtx();
       if (ctx) {
         try {
-          const fam = fontFamily || ARABIC_FONTS[1] || 'Arial';
+          const fam = fontFamily || ARABIC_FONTS[0] || 'Arial';
           // Quote family to handle spaces; use normal weight/style to match Konva default
           ctx.font = `${Math.max(10, fontSize)}px "${fam}"`;
           const m = ctx.measureText(s);
@@ -1120,18 +1124,36 @@ function createCornerDecorations(color: string, width: number, height: number): 
       return Math.ceil(s.length * fontSize * factor);
     };
     const statutJuridique = pickFirstNonEmpty(
-      (initialData?.detenteur as any)?.StatutJuridique,
-      (initialData?.detenteur as any)?.statutJuridique,
-      (initialData?.detenteur as any)?.statut,
+      (initialData?.detenteur as any)?.StatutJuridique?.StatutArab,
+      (initialData?.detenteur as any)?.StatutArab,
+      (initialData?.detenteur as any)?.statut?.StatutArab,
+      (initialData?.detenteur as any)?.statut?.statut_ar,
     );
-    const estimateWidth = (text: string, fontSize: number) => measureTextWidth(text, fontSize, ARABIC_FONTS[1]) + 6;
-    const label1 = `يُمنـــح إلى: ${statutJuridique}`;
-    const value1 = detenteurArabic || detenteur || '';
-    const label2 = 'الموقع:'; const value2 = localisation || '';
+    const statutArabic = pickFirstNonEmpty(
+      (data as any)?.statut_ar_label,
+      (data?.detenteur as any)?.StatutJuridique?.StatutArab,
+      (data?.detenteur as any)?.StatutArab,
+      (data?.detenteur as any)?.statut?.statut_ar,
+      (initialData?.detenteur as any)?.StatutJuridique?.StatutArab,
+      (initialData?.detenteur as any)?.StatutArab,
+      (initialData?.detenteur as any)?.statut?.StatutArab,
+      (initialData?.detenteur as any)?.statut?.statut_ar,
+    );
+    const beneficiaryDisplay = [statutArabic, holderDisplay].filter(Boolean).join(' ').trim();
+    const detenteurArabic = beneficiaryDisplay || holderDisplay;
+
+
+
+    const estimateWidth = (text: string, fontSize: number) => measureTextWidth(text, fontSize, ARABIC_FONTS[0]) + 6;
+    const labelGrant = 'يُمنـــح إلى:';
+    const value1Display = [statutArabic, (holderDisplay || '')].filter(Boolean).join(' ');
+   // const label1 = 'يُمنـــح إلى: الشركة ذات المسؤولية المحدودة';
+   // const value1 = detenteurArabic || detenteur || '';
+    const label2 = 'الموقع: ولايــة'; const value2 = localisation || '';
     const label3 = 'المساحة:'; const value3 = superficie ? `${superficie} هكتار` : '';
     const label4 = 'المــدة:'; const value4 = '';
-    const sepRowLabelW = estimateWidth(label1, 26);
-    const sepRowValueW = estimateWidth(value1, 26);
+    const sepRowLabelW = estimateWidth(labelGrant, 26);
+    const sepRowValueW = estimateWidth(value1Display, 26);
     const inlineW2 = estimateWidth(`${label2} ${value2}`, 24);
     const inlineW3 = estimateWidth(`${label3} ${value3}`, 24);
     const inlineW4 = estimateWidth(`${label4} 00/00/0000 إلى 00/00/0000`, 24);
@@ -1159,30 +1181,30 @@ function createCornerDecorations(color: string, width: number, height: number): 
       parts.forEach(p => { lines += Math.ceil(Math.max(1, p.trim().length) / perLine); });
       return Math.max(fontSize * lineHeight, lines * fontSize * lineHeight);
     };
-    const addRow = (labelAr: string, value: string) => {
+    const addRow = (value: string) => {
       const fz = 26; const lh = 1.35;
       // Unified details renderer in use; disable legacy row rendering
       return;
-      if (labelAr === label1) {
-        // Compute exact adjacency: label flush-right, value ends at (label start - gap)
-        const blockRight = startX + detailsBlockW;
-        const lblW = Math.max(1, measureTextWidth(labelAr, fz, ARABIC_FONTS[1]));
-        const lblX = blockRight - lblW;
-        const valW = Math.max(120, lblX - gap - startX);
-        // Let value wrap within its column starting at startX; label stays single-line
-        const hVal = estimateHeight(value || '....................', valW, fz, lh);
-        const rowH = Math.max(hVal, fz * lh);
-        els.push({ id: uuidv4(), type: 'text', x: startX, y, width: valW, text: value || '....................', language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'right', wrap: 'word', lineHeight: lh });
-        els.push({ id: uuidv4(), type: 'text', x: lblX, y, width: lblW, text: labelAr, language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'right', wrap: 'none', lineHeight: lh });
-        y += Math.ceil(rowH) + 6;
-      } else {
-        const hVal = estimateHeight(value || '....................', valueW, fz, lh);
-        const hLbl = estimateHeight(labelAr, labelW, fz, lh);
-        const rowH = Math.max(hVal, hLbl);
-        els.push({ id: uuidv4(), type: 'text', x: startX, y, width: valueW, text: value || '....................', language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'right', wrap: 'word', lineHeight: lh });
-        els.push({ id: uuidv4(), type: 'text', x: startX + valueW + gap, y, width: labelW, text: labelAr, language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'right', wrap: 'word', lineHeight: lh });
+      // if (labelAr === label1) {
+      //   // Compute exact adjacency: label flush-right, value ends at (label start - gap)
+      //   const blockRight = startX + detailsBlockW;
+      //   const lblW = Math.max(1, measureTextWidth(labelAr, fz, ARABIC_FONTS[0]));
+      //   const lblX = blockRight - lblW;
+      //   const valW = Math.max(120, lblX - gap - startX);
+      //   // Let value wrap within its column starting at startX; label stays single-line
+      //   const hVal = estimateHeight(value || '....................', valW, fz, lh);
+      //   const rowH = Math.max(hVal, fz * lh);
+      //   els.push({ id: uuidv4(), type: 'text', x: startX, y, width: valW, text: value || '....................', language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right', wrap: 'word', lineHeight: lh });
+      //   els.push({ id: uuidv4(), type: 'text', x: lblX, y, width: lblW, text: labelAr, language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right', wrap: 'none', lineHeight: lh });
+      //   y += Math.ceil(rowH) + 6;
+      // } else {
+      //   const hVal = estimateHeight(value || '....................', valueW, fz, lh);
+      //   const hLbl = estimateHeight(labelAr, labelW, fz, lh);
+      //   const rowH = Math.max(hVal, hLbl);
+      //   els.push({ id: uuidv4(), type: 'text', x: startX, y, width: valueW, text: value || '....................', language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right', wrap: 'word', lineHeight: lh });
+      //   els.push({ id: uuidv4(), type: 'text', x: startX + valueW + gap, y, width: labelW, text: labelAr, language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right', wrap: 'word', lineHeight: lh });
        
-      }
+      // }
     };
     // Inline row: label and value as one contiguous text (no gap after ':')
     const addInlineRow = (labelAr: string, value: string) => {
@@ -1192,44 +1214,60 @@ function createCornerDecorations(color: string, width: number, height: number): 
       return;
       const h = estimateHeight(full, detailsBlockW, fz, lh);
       // Allow wrapping within details block width
-      els.push({ id: uuidv4(), type: 'text', x: startX, y, width: detailsBlockW, text: full, language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'right', wrap: 'word', lineHeight: lh });
+      els.push({ id: uuidv4(), type: 'text', x: startX, y, width: detailsBlockW, text: full, language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right', wrap: 'word', lineHeight: lh });
       y += Math.ceil(h) + 6;
     };
     // Details: unified block for labels/values (single multi-line text)
-    const detailsFontSize = 26;
+const detailsFontSize = 26;
     const detailsLineHeight = 1.55;
     const dotPlaceholder = '....................';
-    const legalFormText = statutJuridique && String(statutJuridique).trim() ? String(statutJuridique).trim() : 'الشركة ذات المسؤولية المحدودة';
-    const label1Unified = `يُمنـــح إلى: ${legalFormText}`;
-    const label2Unified = 'الموقع:';
+    // Substance (Arabic) from server data
+    const substanceAr = pickFirstNonEmpty(
+      (data as any)?.substance_ar,
+      (data as any)?.SubstancesArabe,
+      (data as any)?.substances_arabe,
+      (data as any)?.SubstancesAR,
+      (initialData as any)?.substance_ar,
+      (initialData as any)?.SubstancesArabe,
+      (initialData as any)?.substances_arabe,
+      (initialData as any)?.SubstancesAR,
+    );
+   // const label1Unified = 'يُمنـــح إلى: الشركة ذات المسؤولية المحدودة';
+    const label2Unified = 'الموقع: ولايــة';
     const label3Unified = 'المساحة:';
+    const labelSubUnified = 'المــادة المرخّصة:';
     const label4Unified = 'المــدة:';
     const linesUnified = [
-      `${label1Unified} ${value1 || dotPlaceholder}`.trim(),
+      `${labelGrant} ${value1Display || dotPlaceholder}`.trim(),
       `${label2Unified} ${localisation || dotPlaceholder}`.trim(),
       `${label3Unified} ${superficie ? `${superficie} هكتار` : dotPlaceholder}`.trim(),
+      `${labelSubUnified} ${substanceAr || dotPlaceholder}`.trim(),
       `${label4Unified} ${computeDureeAr() || dotPlaceholder}`.trim(),
     ];
     const maxBlockW2 = DEFAULT_CANVAS.width - (leftMargin + marginRight);
-    const maxLineW2 = Math.max(0, ...linesUnified.map(l => measureTextWidth(l, detailsFontSize, ARABIC_FONTS[1])));
+    const maxLineW2 = Math.max(0, ...linesUnified.map(l => measureTextWidth(l, detailsFontSize, ARABIC_FONTS[0])));
     const detailsBlockW2 = Math.min(Math.max(300, maxLineW2 + 12), maxBlockW2);
     const startX2 = DEFAULT_CANVAS.width - marginRight - detailsBlockW2;
     const detailsTextUnified = linesUnified.join('\n');
     const blockH2 = estimateHeight(detailsTextUnified, detailsBlockW2, detailsFontSize, detailsLineHeight);
-    els.push({ id: uuidv4(), type: 'text', x: startX2, y, width: detailsBlockW2, text: detailsTextUnified, language: 'ar', direction: 'rtl', fontSize: detailsFontSize, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'right', wrap: 'word', lineHeight: detailsLineHeight });
+    els.push({ id: uuidv4(), type: 'text', x: startX2, y, width: detailsBlockW2, text: detailsTextUnified, language: 'ar', direction: 'rtl', fontSize: detailsFontSize, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right', wrap: 'word', lineHeight: detailsLineHeight });
     y += Math.ceil(blockH2) + 6;
-    // Legacy row renderers are disabled; unified block above already contains these details
-
-    // Replace legacy static grid with a single controllable table element
+    // Beneficiary: first the legal form, then the actual holder on a separate line
+    addRow( detenteurArabic||detenteur);
+    addInlineRow('الموقع:', localisation);
+    addInlineRow('المساحة:', superficie ? `${superficie} هكتار` : '');
+    // Duration row: compute from DateOctroi -> DateExpiration when available, else use server-provided display   
+    addInlineRow('المــدة:', computeDureeAr());
     try {
       const MIN_ROWS = rowsPerColSetting;
       const coords: any[] = Array.isArray(data?.coordinates) ? data.coordinates : [];
       const desiredCols = Math.max(1, Math.ceil(Math.max(coords.length, MIN_ROWS) / MIN_ROWS));
       const blockCols = Math.min(3, desiredCols);
-      const baseColWidths = [60, 90, 90];
+      // Columns (left to right): ع (X), س (Y), النقطة (Point)
+      const baseColWidths = [90, 90, 60];
       // Exact rows per column to match dataset size (no extra rows)
       const rowsPerColExact = Math.max(1, Math.min(60, Math.ceil((coords.length || 1) / blockCols)));
-      const headerText = 'إحـداثيات قمم المحيط المنجمي حسب نظام UTM شمال الصحراء  Fuseau 32';
+      const headerText = 'إحـداثيات قمم المحيط المنجمي حسب نظام UTM شمال الصحراء';
       const headerH = 48;
       const rowH = 34;
       const blockW = baseColWidths.reduce((a, b) => a + b, 0);
@@ -1247,7 +1285,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
         draggable: true,
         stroke: '#000',
         strokeWidth: 1.2,
-        headerText: 'إحداثيات UTM — Fuseau  32',
+        headerText,
         headerHeight: headerH,
         headerFill: '#f5f5f5',
         altRowFill: '#f8f8f8',
@@ -1255,9 +1293,10 @@ function createCornerDecorations(color: string, width: number, height: number): 
         rowsPerCol: rowsPerColExact,
         blockCols,
         colWidths: baseColWidths,
-        tableFontFamily: 'Arial',
+        tableFontFamily: ARABIC_FONTS[0],
         tableFontSize: 14,
-        tableTextAlign: 'left',
+        tableTextAlign: 'right',
+        headerTextAlign: 'center',
         showCellBorders: true,
         tableGridColor: '#4F4040',
         tableGridWidth: 1,
@@ -1265,11 +1304,11 @@ function createCornerDecorations(color: string, width: number, height: number): 
         outerBorderWidth: 1.2,
         cellPadding: 8,
         tableColumns: [
-          { key: 'point', title: 'Point', width: baseColWidths[0], align: 'left' },
-          { key: 'x', title: 'X', width: baseColWidths[1], align: 'left' },
-          { key: 'y', title: 'Y', width: baseColWidths[2], align: 'left' },
+          { key: 'x', title: 'ع', width: baseColWidths[0], align: 'right' },
+          { key: 'y', title: 'س', width: baseColWidths[1], align: 'right' },
+          { key: 'point', title: 'النقطة', width: baseColWidths[2], align: 'right' },
         ],
-        tableData: coords.map((c: any, idx: number) => ({ point: String(idx + 1), x: String(c.x ?? ''), y: String(c.y ?? '') })),
+        tableData: coords.map((c: any, idx: number) => ({ x: String(c.x ?? ''), y: String(c.y ?? ''), point: String(idx + 1) })),
       } as any;
       els.push(tableEl as any);
       // Add bottom title inside double lines just below the table
@@ -1286,14 +1325,14 @@ function createCornerDecorations(color: string, width: number, height: number): 
         const textY = topY2 + titlePadding;
         const bottomY1 = textY + titleFontSize + 6;
         const bottomY2 = bottomY1 + dblGap;
-        const bottomNotice = `سند منجمي مسجل في السجل المنجمي تحت رقم : ${code} ${typeCode}`;
+        const bottomNotice = `سند منجمي مسجل في السجل المنجمي تحت رقم : ${LRM}${code} ${LRM}${typeCode}`;
         // Double top lines
         els.push({ id: uuidv4(), type: 'line', x: bandX, y: topY1, width: bandW, height: 0, stroke: '#000', strokeWidth: 1.2, draggable: true } as any);
         els.push({ id: uuidv4(), type: 'line', x: bandX, y: topY2, width: bandW, height: 0, stroke: '#000', strokeWidth: 1.2, draggable: true } as any);
         // Title text centered between doubles
-        const noticeText = `سند منجمي مسجل في السجل المنجمي تحت رقم : ${code} ${typeCode}`;
+        const noticeText = `سند منجمي مسجل في السجل المنجمي تحت رقم : ${LRM}${code} ${LRM}${typeCode}`;
         const noticeFontSize = 32;
-        els.push({ id: uuidv4(), type: 'text', x: bandX, y: textY, width: bandW, text: noticeText, language: 'ar', direction: 'rtl', fontSize: noticeFontSize, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'center' } as any);
+    els.push({ id: uuidv4(), type: 'text', x: bandX, y: textY, width: bandW, text: noticeText, language: 'ar', direction: 'rtl', fontSize: noticeFontSize, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
         
         // Dynamic diagonal line starting from the left edge of the page band under the sentence to the bottom-left corner
         try {
@@ -1329,7 +1368,8 @@ function createCornerDecorations(color: string, width: number, height: number): 
 
     // Multi-column coordinates table (colors/separators like the model)
     let tableX = 40;
-    let colPtW = 60, colXW = 90, colYW = 90;
+    // Columns (left to right): ع (X), س (Y), النقطة (Point)
+    let colPtW = 90, colXW = 90, colYW = 60;
     let blockW = colPtW + colXW + colYW; // 240
     const baseBlockW = blockW;
     const MIN_ROWS = rowsPerColSetting;
@@ -1352,7 +1392,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
     const headerH = 48;
     const headerY = y + 40;
     els.push({ id: uuidv4(), type: 'rectangle', x: tableX, y: headerY, width: tableW, height: headerH, stroke: '#000', strokeWidth: 1.2, fill: '#f5f5f5' } as any);
-    els.push({ id: uuidv4(), type: 'text', x: tableX + 6, y: headerY + 4, width: tableW - 12, text: 'إحـداثيات قمم المحيط المنجمي حسب نظام UTM شمال الصحراء  Fuseau 32', language: 'ar', direction: 'rtl', fontSize: 20, fontFamily: ARABIC_FONTS[1], color: '#000', draggable: true, textAlign: 'center' } as any);
+    els.push({ id: uuidv4(), type: 'text', x: tableX + 6, y: headerY + 4, width: tableW - 12, text: 'إحـداثيات قمم المحيط المنجمي حسب نظام UTM شمال الصحراء — Fuseau 32', language: 'ar', direction: 'rtl', fontSize: 20, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
 
     // Multi-column coordinates table (colors/separators like the model)
     const tableStartY = headerY + headerH;
@@ -1369,9 +1409,9 @@ function createCornerDecorations(color: string, width: number, height: number): 
       els.push({ id: uuidv4(), type: 'line', x: bx + colPtW, y: tableStartY, width: vHeight, height: 0, rotation: 90, stroke: '#4F4040', strokeWidth: 1, meta: { nonInteractive: true, isGrid: true } } as any);
       els.push({ id: uuidv4(), type: 'line', x: bx + colPtW + colXW, y: tableStartY, width: vHeight, height: 0, rotation: 90, stroke: '#4F4040', strokeWidth: 1, meta: { nonInteractive: true, isGrid: true } } as any);
       // Column headers
-      els.push({ id: uuidv4(), type: 'text', x: bx + 8, y: tableStartY + 4, width: colPtW - 16, text: 'Point', fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'left' } as any);
-      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + 8, y: tableStartY + 4, width: colXW - 16, text: 'X', fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'left' } as any);
-      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW + 8, y: tableStartY + 4, width: colYW - 16, text: 'Y', fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'left' } as any);
+      els.push({ id: uuidv4(), type: 'text', x: bx + 8, y: tableStartY + 4, width: colPtW - 16, text: 'ع', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right' } as any);
+      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + 8, y: tableStartY + 4, width: colXW - 16, text: 'س', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right' } as any);
+      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW + 8, y: tableStartY + 4, width: colYW - 16, text: 'النقطة', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right' } as any);
 
       // Rows
       for (let r = 0; r < rowsPerCol; r++) {
@@ -1393,9 +1433,10 @@ function createCornerDecorations(color: string, width: number, height: number): 
           const vPoint = String(idx + 1);
           const vX = String(item.x ?? '');
           const vY = String(item.y ?? '');
-          els.push({ id: uuidv4(), type: 'text', x: bx + 8, y: ry + 4, width: colPtW - 16, text: vPoint, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'left' } as any);
-          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + 8, y: ry + 4, width: colXW - 16, text: vX, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'left' } as any);
-          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW + 8, y: ry + 4, width: colYW - 16, text: vY, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'left' } as any);
+          // Left to right columns: ع (X), س (Y), النقطة (Point)
+          els.push({ id: uuidv4(), type: 'text', x: bx + 8, y: ry + 4, width: colPtW - 16, text: vX, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'right' } as any);
+          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + 8, y: ry + 4, width: colXW - 16, text: vY, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'right' } as any);
+          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW + 8, y: ry + 4, width: colYW - 16, text: vPoint, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'right' } as any);
         }
         // Horizontal subtle grid line
         els.push({ id: uuidv4(), type: 'line', x: bx, y: ry, width: blockW, height: 0, stroke: '#4F4040', strokeWidth: 1, meta: { nonInteractive: true, isGrid: true } } as any);
@@ -1420,7 +1461,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
     try {
       const typeCode = data?.typePermis?.code || '';
       const code = data?.code_demande || data?.codeDemande || '';
-      const bottomNotice = `سند منجمي مسجل في السجل المنجمي تحت رقم : ${code} ${typeCode}`;
+      const bottomNotice = `سند منجمي مسجل في السجل المنجمي تحت رقم : ${LRM}${code} ${LRM}${typeCode}`;
       // Bottom notice band is always 90% of page width
       const noticeWidth = Math.floor(DEFAULT_CANVAS.width * 0.9);
       const noticeX = (DEFAULT_CANVAS.width - noticeWidth) / 2;
@@ -1435,7 +1476,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
         language: 'ar',
         direction: 'rtl',
         fontSize: 32,
-        fontFamily: ARABIC_FONTS[1],
+        fontFamily: ARABIC_FONTS[0],
         color: '#000',
         draggable: true,
         textAlign: 'center',
@@ -1449,7 +1490,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       try {
         const noticeFontSize = 32;
         const centerX = noticeX + noticeWidth / 2;
-        const textW = Math.max(1, measureTextWidth(bottomNotice, noticeFontSize, ARABIC_FONTS[1]));
+        const textW = Math.max(1, measureTextWidth(bottomNotice, noticeFontSize, ARABIC_FONTS[0]));
         // Arabic text logical end sits on the left-most edge when centered
         const xStart = centerX - textW / 2 - 4; // small visual padding
         const yStart = noticeY + noticeFontSize * 0.7; // approximate baseline
@@ -1788,7 +1829,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       language: type === 'text' ? (currentPage === PAGES.ARTICLES ? 'ar' : 'fr') : undefined,
       direction: type === 'text' ? (currentPage === PAGES.ARTICLES ? 'rtl' : 'ltr') : undefined,
       fontSize: 20,
-      fontFamily: type === 'text' ? (currentPage === PAGES.ARTICLES ? ARABIC_FONTS[1] : FONT_FAMILIES[0]) : FONT_FAMILIES[0],
+      fontFamily: type === 'text' ? (currentPage === PAGES.ARTICLES ? ARABIC_FONTS[0] : FONT_FAMILIES[0]) : FONT_FAMILIES[0],
       color: '#101822',
       draggable: true,
       fill: type === 'rectangle' ? '#ffffff' : undefined,
@@ -1940,7 +1981,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
         templateId: activeTemplate,
         name
       });
-      toast.success('Design sauvegard?© avec succ?¨s');
+      toast.success('Design sauvegardé avec succ?¨s');
       try {
         if (savedPermisId) {
           const templatesResponse = await axios.get(`${apiURL}/api/permis/${savedPermisId}/templates`);
@@ -2159,8 +2200,37 @@ function createCornerDecorations(color: string, width: number, height: number): 
 
   const handlePropertyChange = useCallback((property: keyof PermisElement, value: any) => {
     if (selectedIds.length === 0) return;
-    setElementsForCurrent(prev => prev.map(el => (selectedIds.includes(el.id) ? { ...el, [property]: value } : el)));
-  }, [selectedIds, setElementsForCurrent]);
+    setElementsForCurrent(prev => prev.map(el => (selectedIds.includes(el.id) ? { ...el, [property]: value } as PermisElement : el)));
+    // If inline text editor is open for the selected text, reflect style changes immediately
+    if (textOverlay && selectedIds.includes(textOverlay.id)) {
+      const styleProps = new Set(['fontFamily','fontSize','color','lineHeight','direction','textAlign']);
+      if (styleProps.has(property as string)) {
+        setTextOverlay(prev => prev ? {
+          ...prev,
+          fontFamily: property === 'fontFamily' ? String(value) : prev.fontFamily,
+          fontSize: property === 'fontSize' ? Number(value) * zoom : prev.fontSize,
+          color: property === 'color' ? String(value) : prev.color,
+          lineHeight: property === 'lineHeight' ? Number(value) : prev.lineHeight,
+          direction: property === 'direction' ? String(value) as any : prev.direction,
+          textAlign: property === 'textAlign' ? String(value) as any : prev.textAlign,
+        } : prev);
+      }
+    }
+    // Proactively ensure the requested font is loaded before final draw (for Konva on canvas)
+    if (property === 'fontFamily') {
+      try {
+        const fam = String(value);
+        const quoted = /\s/.test(fam) ? `"${fam}"` : fam;
+        const fontsObj: any = (document as any).fonts;
+        if (fontsObj?.load) {
+          fontsObj.load(`16px ${quoted}`).then(() => {
+            try { (stageRef.current as any)?.getLayer?.()?.batchDraw?.(); } catch {}
+          }).catch(() => {});
+        }
+      } catch {}
+    }
+  }, [selectedIds, setElementsForCurrent, textOverlay, zoom]);
+
 
   const handleZoom = useCallback((direction: 'in' | 'out') => {
     const newZoom = direction === 'in' ? zoom * 1.2 : zoom / 1.2;
@@ -2239,7 +2309,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       width,
       height,
       fontSize: (element.fontSize || 20) * zoom,
-      fontFamily: element.fontFamily || FONT_FAMILIES[0],
+      fontFamily: element.fontFamily || ((element.language === 'ar') ? ARABIC_FONTS[0] : FONT_FAMILIES[0]),
       color: element.color || '#000',
       direction: element.direction || 'ltr',
       textAlign: (element as any).textAlign || 'left',
@@ -2742,7 +2812,7 @@ const pageLabel = (idx: number) => {
 
                   <div className={styles.propRow}>
                     <label>Font</label>
-                    <select value={firstSelected.fontFamily || (firstSelected.language === 'ar' ? ARABIC_FONTS[1] : FONT_FAMILIES[0])}
+                    <select value={firstSelected.fontFamily || (firstSelected.language === 'ar' ? ARABIC_FONTS[0] : FONT_FAMILIES[0])}
                       onChange={(e) => handlePropertyChange('fontFamily', e.target.value)}>
                       {(firstSelected.language === 'ar' ? ARABIC_FONTS : FONT_FAMILIES).map(font => <option key={font} value={font}>{font}</option>)}
                     </select>

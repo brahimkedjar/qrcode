@@ -86,6 +86,13 @@ export const TableElement: React.FC<TableElementProps> = ({
     } as const;
   }, [element]);
 
+  const safeFontFamily = (fam?: string) => {
+    if (!fam) return fam as any;
+    const trimmed = String(fam).trim();
+    if (/^['"].*['"]$/.test(trimmed)) return trimmed; // already quoted
+    return /\s/.test(trimmed) ? `"${trimmed}"` : trimmed;
+  };
+
   const common = {
     id: element.id,
     x: element.x,
