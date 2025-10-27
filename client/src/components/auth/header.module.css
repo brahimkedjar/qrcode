@@ -1,0 +1,64 @@
+/* Header styles */
+.bar {
+  height: 60px;
+  background: #ffffff;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  letter-spacing: .3px;
+}
+.badge {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.user {
+  font-weight: 600;
+}
+.logout {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 6px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.logout:hover { background: #f8fafc; }
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 10px;
+}
+.tab {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 6px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.tabActive {
+  background: #eff6ff;
+  border-color: #dbeafe;
+  color: #1d4ed8;
+}

@@ -1,0 +1,465 @@
+/* File: components/PermisDesigner.module.css */
+
+/* Theme variables */
+.theme {
+  --bg: #f6f8fa;
+  --panel: #ffffff;
+  --muted: #6b7280;
+  --accent: #0b6b95;
+  --accent-2: #1a5276;
+  --surface: #0f1724;
+  --glass: rgba(11,107,149,0.06);
+  --radius: 10px;
+  --shadow: 0 6px 18px rgba(11,22,40,0.06);
+  --glass-2: rgba(15,23,36,0.04);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* Container */
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg);
+  min-height: 100%;
+}
+
+/* Header */
+.header {
+  display:flex;
+  align-items:center;
+  gap: 12px;
+  justify-content: space-between;
+  background: linear-gradient(90deg, rgba(255,255,255,0.6), rgba(255,255,255,0.2));
+  padding: 10px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid rgba(10,20,30,0.03);
+}
+
+.brand {
+  font-weight: 700;
+  color: var(--surface);
+  font-size: 16px;
+  letter-spacing: 0.2px;
+}
+
+/* Toolbar row */
+.toolbar {
+  display: flex;
+    align-items: baseline;
+    gap: 12px;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.tools {
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+
+.toolButton {
+  display:inline-grid;
+  place-items:center;
+  width:38px;
+  height:38px;
+  border-radius:8px;
+  border: none;
+  background: transparent;
+  cursor:pointer;
+  transition: all .14s ease;
+  color: var(--surface);
+}
+.toolButton:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(11,22,40,0.06); background: var(--glass); }
+.toolButton.active { background: var(--accent); color:#fff; box-shadow: 0 8px 20px rgba(11,107,149,0.12); }
+
+.pager {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(15,23,36,0.02);
+  margin-left: 12px;
+}
+.iconBtn {
+  border-radius:8px;
+  width:36px; height:36px;
+  border: none;
+  display:inline-grid; place-items:center;
+  cursor:pointer;
+  background: transparent;
+}
+.iconBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.pageLabel {
+  min-width: 210px;
+  text-align:center;
+  color: var(--surface);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* Right tools */
+.rightTools {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-left: auto;
+}
+
+.zoomGroup {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:6px;
+  background: var(--glass-2);
+  border-radius: 8px;
+}
+.zoomDisplay { width:48px; text-align:center; font-weight:600; }
+
+.templateSelect {
+  height:36px;
+  border-radius:8px;
+  border:1px solid rgba(10,20,30,0.06);
+  padding: 6px 8px;
+  background: #fff;
+}
+
+.actionBtn {
+  display:inline-flex;
+  gap:8px;
+  align-items:center;
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid rgba(10,20,30,0.06);
+  background: var(--panel);
+  cursor:pointer;
+}
+.primaryBtn {
+  display:inline-flex;
+  gap:8px;
+  align-items:center;
+  padding:8px 12px;
+  border-radius:8px;
+  border:none;
+  background: linear-gradient(180deg,var(--accent),var(--accent-2));
+  color:white;
+  cursor:pointer;
+}
+
+/* Body layout */
+.body {
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+}
+
+/* Sidebar (articles) */
+.sidebar {
+  width: 320px;
+  flex: 0 0 320px;
+  background: var(--panel);
+  border-radius: var(--radius);
+  border: 1px solid rgba(10,20,30,0.03);
+  padding: 10px;
+  box-shadow: var(--shadow);
+  height: calc(100vh - 170px);
+  overflow:auto;
+}
+
+/* Canvas Area */
+.canvasArea {
+  flex: 1 1 auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-width: 0; /* allow shrinking in flex layout */
+  padding: 8px;
+  overflow: auto;
+}
+.canvasWrap {
+    background: #fff;
+    border-radius: 8px;
+    padding: 18px;
+    box-shadow: 0 12px 40px rgba(10,20,30,0.06);
+    border: 1px solid rgba(10,20,30,0.04);
+    max-width: 100%;
+    max-height: 100%;
+    overflow: auto;
+}
+
+/* Text overlay for editing */
+.textOverlay {
+  position: fixed;
+  z-index: 1200;
+  padding: 8px;
+  margin: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(10,110,150,0.9);
+  box-shadow: 0 6px 24px rgba(2,6,23,0.12);
+  background: white;
+  resize: vertical;
+  min-height: 36px;
+}
+
+/* Properties panel */
+.properties {
+  width: 300px;
+  flex: 0 0 450px;
+  background: var(--panel);
+  border-radius: var(--radius);
+  border: 1px solid rgba(10,20,30,0.03);
+  padding: 12px;
+  box-shadow: var(--shadow);
+  height: auto;
+  overflow:auto;
+}
+
+
+.propsInner h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+}
+.small { color: var(--muted); font-weight: 500; font-size:12px; margin-left:8px; }
+
+/* properties rows */
+.propRow { margin-bottom: 10px; display:flex; flex-direction:column; gap:6px; }
+.inlineInputs { display:flex; gap:6px; }
+.inlineInputs input[type="number"] { width: 100%; padding:8px; border-radius:6px; border:1px solid rgba(10,20,30,0.06); }
+.propRow label { font-weight:600; color: var(--muted); font-size:13px; }
+
+/* color row */
+.colorRow { display:flex; gap:8px; align-items:center; }
+.colorCode { font-size:12px; color:var(--muted); background: var(--glass); padding:6px 8px; border-radius:6px; }
+
+/* empty state */
+.emptyProps { color: var(--muted); text-align:center; padding: 18px 10px; }
+
+/* responsive */
+@media (max-width: 1100px) {
+  .sidebar { display:none; }
+  .properties { display:none; }
+  .canvasArea { min-width: 360px; }
+  .pageLabel { min-width: 140px; font-size: 12px; }
+}
+
+@media (max-width: 680px) {
+  .rightTools { display:none; }
+  .toolbar { flex-wrap:wrap; gap:8px; }
+  .brand { font-size: 14px; }
+  .container { padding: 8px; }
+  .header { padding: 8px; }
+  .canvasWrap { padding: 8px; }
+}
+
+
+/* PermisDesigner.module.css */
+.header-text {
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.agency-text {
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+.permit-box {
+  border-style: dashed;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.permit-title {
+  font-weight: bold;
+  padding: 10px;
+}
+
+.code-text {
+  font-style: italic;
+  margin-top: 20px;
+}
+
+/* Add to your styles */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  width: 500px;
+  max-width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.templateControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.templateList {
+  margin: 20px 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.templateItem {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+.templateActions {
+  display: flex;
+  gap: 8px;
+}
+
+.templateForm {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.templateForm input {
+  flex: 1;
+  padding: 8px;
+}
+
+.closeModal {
+  margin-top: 20px;
+  padding: 8px 16px;
+}
+
+.resizeGroup {
+  display: flex;
+  gap: 4px;
+  margin-left: 10px;
+  align-items: center;
+}
+
+.resizeGroup button {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.qrTextData {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: #f5f5f5;
+  padding: 1rem;
+  border-radius: 4px;
+  font-family: monospace;
+  line-height: 1.5;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.statusIndicator {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background-color: #10b981;
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.statusIcon {
+  margin-right: 4px;
+}
+
+.permisStatus {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-right: 8px;
+}
+
+.statusIcon {
+  margin-right: 4px;
+  color: #28a745;
+}
+
+.statusIconWarning {
+  margin-right: 4px;
+  color: #ffc107;
+}
+
+.actionBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.templateSection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.templateActions {
+  display: flex;
+  gap: 4px;
+}
+
+.statusIconLoading {
+  margin-right: 4px;
+  color: #007bff;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Add to PermisDesigner.module.css */
+.rtlText {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: plaintext;
+}
+
+.arabicFont {
+  font-family: 'Simplified Arabic', 'Arial', sans-serif;
+}
+
+.textContainer {
+  direction: rtl;
+  unicode-bidi: isolate;
+}
+
+/* Ensure text elements don't exceed boundaries */
+.textBoundary {
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  hyphens: auto;
+}
+.rtlText {
+  direction: rtl;
+  text-align: right;
+}
+.ltrText {
+  direction: ltr;
+  text-align: left;
+}

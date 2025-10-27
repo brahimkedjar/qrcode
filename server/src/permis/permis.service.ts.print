@@ -1,0 +1,92 @@
+import { Injectable } from '@nestjs/common';
+import { AccessService } from './access.service';
+
+// Adjust these defaults to match your Access schema
+const DEFAULT_TABLES = {
+  permis: process.env.ACCESS_TABLE_PERMIS || 'Titres',
+  coordinates: process.env.ACCESS_TABLE_COORDINATES || 'Coordonees'
+};
+
+// Map Access column names to API fields expected by the client
+const DEFAULT_COLUMNS = {
+  permis: {
+    id: process.env.ACCESS_COL_PERMIS_ID || 'id',
+    typePermis: process.env.ACCESS_COL_TYPE || 'idType',
+    codeDemande: process.env.ACCESS_COL_CODE || 'Code',
+    detenteur: process.env.ACCESS_COL_DETENTEUR || 'idDetenteur',
+    superficie: process.env.ACCESS_COL_SUPERFICIE || 'Superficie',
+    duree: process.env.ACCESS_COL_DUREE || '',
+    localisation: process.env.ACCESS_COL_LOCALISATION || 'LieuDit',
+    dateCreation: process.env.ACCESS_COL_DATE || 'DateDemande'
+  },
+  coordinates: {
+    permisId: process.env.ACCESS_COL_COORD_PERMIS_ID || 'permis_id',
+    x: process.env.ACCESS_COL_COORD_X || 'x',
+    y: process.env.ACCESS_COL_COORD_Y || 'y',
+    order: process.env.ACCESS_COL_COORD_ORDER || 'pt_order'
+  }
+};
+
+@Injectable()
+export class PermisService {
+  constructor(private readonly access: AccessService) {}
+
+  async getPermisById(id: string) {
+    const t = DEFAULT_TABLES.permis;
+    const c = DEFAULT_COLUMNS.permis;
+    const isNumericId = /^\d+$/.test(id);
+    const sql = `SELECT * FROM ${t} WHERE ${c.id} = ${isNumericId ? id : this.access.escapeValue(id)}`;
+    const rows = await this.access.query(sql);
+    if (!rows.length) return null;
+    const r = rows[0] as Record<string, any>;
+    const toStr = (v: any) => (v == null ? '' : String(v));
+    const toNum = (v: any) => (v == null || v === '' ? null : Number(v));
+    const val: any = {
+      id: r[c.id],
+      typePermis: toStr(r[c.typePermis]),
+      codeDemande: toStr(r[c.codeDemande]),
+      detenteur: toStr(r[c.detenteur]),
+      superficie: toNum(r[c.superficie]),
+      duree: c.duree ? toStr(r[c.duree]) : '',
+      localisation: toStr(r[c.localisation]),
+      dateCreation: r[c.dateCreation] ? new Date(r[c.dateCreation]).toISOString() : null,
+      coordinates: await this.getCoordinatesByPermisId(String(r[c.id])).catch(() => [])
+    };
+    // Add compatibility fields expected by designer
+    val.code_demande = val.codeDemande;
+    val.id_demande = val.id;
+    val.typePermis = { lib_type: String(r[c.typePermis] ?? ''), duree_initiale: null };
+    return val;
+  }
+
+  async getCoordinatesByPermisId(id: string) {
+    const t = DEFAULT_TABLES.coordinates;
+    const c = DEFAULT_COLUMNS.coordinates;
+    const isNumericId = /^\d+$/.test(id);
+    const sql = `SELECT ${c.x} AS x, ${c.y} AS y, ${c.order} AS pt_order FROM ${t} WHERE ${c.permisId} = ${isNumericId ? id : this.access.escapeValue(id)} ORDER BY ${c.order}`;
+    let rows: any[] = [];
+    try {
+      rows = await this.access.query(sql);
+    } catch {
+      return [];
+    }
+    return rows.map((r: any) => ({ x: Number(r.x), y: Number(r.y), order: Number(r.pt_order) }));
+  }
+
+  async runRaw(sql: string) {
+    const rows = await this.access.query(sql);
+    return { rows };
+  }
+
+  async findPermisByProcedure(procedureId: string) {
+    const t = DEFAULT_TABLES.permis;
+    const c = DEFAULT_COLUMNS.permis;
+    const isNumericId = /^\d+$/.test(procedureId);
+    const sql = `SELECT ${c.id} as id, ${c.codeDemande} as code FROM ${t} WHERE ${c.id} = ${isNumericId ? procedureId : this.access.escapeValue(procedureId)}`;
+    const rows = await this.access.query(sql);
+    if (!rows.length) return { exists: false };
+    const r = rows[0] as any;
+    return { exists: true, permisId: Number(r.id), permisCode: String(r.code) };
+  }
+}
+

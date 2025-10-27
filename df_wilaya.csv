@@ -1,0 +1,59 @@
+﻿id_wilaya;id_antenne;code_wilaya;nom_wilayaFR;nom_wilayaAR;zone
+1;17;1;ADRAR;أدرار;C_Extrême sud
+2;2;44;AIN DEFLA;عين الدفلى;A_Nord
+3;3;46;AIN TEMOUCHENT;عين تموشنت;A_Nord
+4;9;16;ALGER;الجزائر;A_Nord
+5;14;23;ANNABA;عنابة;A_Nord
+6;1;5;BATNA;باتنة;A_Nord
+7;17;8;BECHAR;بشار;B_Sud et porximité
+8;4;6;BEJAIA;بجاية;A_Nord
+9;1;7;BISKRA;بسكرة;B_Sud et porximité
+10;5;9;BLIDA;البليدة;A_Nord
+11;6;34;BORDJ BOU ARRERIDJ;برج بوعريريج;A_Nord
+12;6;10;BOUIRA;البويرة;A_Nord
+13;9;35;BOUMERDES;بومرداس;A_Nord
+14;2;2;CHLEF;الشلف;A_Nord
+15;7;25;CONSTANTINE;قسنطينة;A_Nord
+16;10;17;DJELFA;الجلفة;B_Sud et porximité
+17;15;32;EL BAYADH;البيض;B_Sud et porximité
+18;16;39;EL OUED;الوادى;B_Sud et porximité
+19;14;36;EL TAREF;الطارف;A_Nord
+20;18;47;GHARDAIA;غرداية;B_Sud et porximité
+21;14;24;GUELMA;قالمة;A_Nord
+22;13;33;ILLIZI;ايليزى;C_Extrême sud
+23;8;18;JIJEL;جيجل;A_Nord
+24;11;40;KHENCHELA;خنشلة;A_Nord
+25;10;3;LAGHOUAT;الأغواط;B_Sud et porximité
+26;15;29;MASCARA;معسكر;A_Nord
+27;5;26;MEDEA;المدية;A_Nord
+28;8;43;MILA;ميلة;A_Nord
+29;3;27;MOSTAGANEM;مستغانم;A_Nord
+30;10;28;M'SILA;المسيلة;A_Nord
+31;19;45;NAAMA;النعامة;B_Sud et porximité
+32;3;31;ORAN;وهران;A_Nord
+33;18;30;OUARGLA;ورقلة;B_Sud et porximité
+34;11;4;OUM EL BOUAGHI;أم البواقى;A_Nord
+35;2;48;RELIZANE;غليزان;A_Nord
+36;15;20;SAIDA;سعيدة;A_Nord
+37;4;19;SETIF;سطيف;A_Nord
+38;19;22;SIDI BEL ABBES;سيدى بلعباس;A_Nord
+39;7;21;SKIKDA;سكيكدة;A_Nord
+40;11;41;SOUK AHRAS;سوق أهراس;A_Nord
+41;20;11;TAMANRASSET;تامنغست;C_Extrême sud
+42;16;12;TEBESSA;تبسة;A_Nord
+43;12;14;TIARET;تيارت;A_Nord
+44;17;37;TINDOUF;تندوف;C_Extrême sud
+45;5;42;TIPAZA;تيبازة;A_Nord
+46;12;38;TISSEMSILT;تيسمسيلت;A_Nord
+47;9;15;TIZI OUZOU;تيزى وزو;A_Nord
+48;19;13;TLEMCEN;تلمسان;A_Nord
+49;17;49;TIMIMOUN;تيميمون;
+50;20;50;BORDJ BADJI MOKHTAR;برج باجى مختار;
+51;1;51;OULED DJELLAL;أولاد جلال;
+52;17;52;BENI ABBES;بني عباس;
+53;20;53;IN SALAH;ان صالح;
+54;20;54;IN GUEZZAM;إن ڨزام;
+55;18;55;TOUGGOURT;تڨرت;
+56;13;56;DJANET;جانت;
+57;16;57;EL MEGAIER;المغير;
+58;18;58;EL MENIAA;المنيعة;

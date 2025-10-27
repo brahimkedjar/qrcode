@@ -1,0 +1,104 @@
+/* Modern, attractive loader panel for the main screen */
+/* Theme variables for smooth, modern light palette */
+.wrap {
+  --bg-surface: #ffffff;
+  --bg-tint-1: #f7fafc;
+  --bg-tint-2: #eef2f7;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border-soft: #e5e7eb;
+  --brand-500: #3b82f6;
+  --brand-600: #2563eb;
+  --brand-700: #1d4ed8;
+  --brand-50: #eff6ff;
+  --brand-100: #dbeafe;
+  --shadow-lg: 0 10px 30px rgba(2, 6, 23, .06);
+  padding: 16px;
+}
+
+.hero {
+  border-radius: 18px;
+  padding: 24px;
+  background:
+    radial-gradient(900px 400px at 10% -10%, rgba(59,130,246, .10) 0%, transparent 60%),
+    radial-gradient(900px 400px at 90% -10%, rgba(99,102,241, .08) 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-tint-1) 100%);
+  color: var(--text-primary);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-lg);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.title { font-size: 22px; font-weight: 800; letter-spacing: .3px; }
+.meta {
+  font-size: 12px;
+  background: var(--brand-50);
+  color: var(--brand-700);
+  border: 1px solid var(--brand-100);
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  margin-top: 16px;
+}
+.field {
+  position: relative;
+}
+.input {
+  width: 100%;
+  padding: 14px 44px 14px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  background: #fff;
+  color: var(--text-primary);
+  outline: none;
+}
+.input::placeholder { color: #94a3b8; }
+.input:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px rgba(59,130,246,.16); }
+.btn {
+  padding: 14px 16px;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--brand-600), var(--brand-500));
+}
+.btn:hover { filter: brightness(1.03); }
+
+.err {
+  margin-top: 10px;
+  color: #7f1d1d;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.empty {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px dashed var(--border-soft);
+  border-radius: 14px;
+  color: var(--text-secondary);
+  background: var(--bg-tint-2);
+  font-size: 14px;
+}
+
+.content {
+  margin-top: 16px;
+}
+
+@media (max-width: 760px) {
+  .form { grid-template-columns: 1fr; }
+}

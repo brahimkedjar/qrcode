@@ -1,0 +1,14 @@
+{
+  "name": "TXC - رخصة استغلال مقلع",
+  "articles": [
+    { "id": "intro", "title": "", "content": "إن رئـيس اللجنة المديرة", "preselected": true },
+    { "id": "considerations", "title": "", "content": "", "preselected": true },
+    { "id": "decision", "title": "يقرر ما يلي", "content": "", "preselected": true },
+    { "id": "art1", "title": "المادة 1", "content": "", "preselected": true },
+    { "id": "art2", "title": "المادة 2", "content": "", "preselected": true },
+    { "id": "art3", "title": "المادة 3", "content": "", "preselected": true },
+    { "id": "art4", "title": "المادة 4", "content": "", "preselected": true },
+    { "id": "signature", "title": "التوقيع", "content": "رئـيس اللجنة المديرة: مراد حنيفي\nحُرر بالجزائر في: ............", "preselected": true }
+  ]
+}
+
