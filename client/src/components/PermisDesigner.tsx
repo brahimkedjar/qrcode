@@ -176,7 +176,75 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
     const height = size?.height ?? DEFAULT_CANVAS.height;
     const borderElements = createPageBorder(width, height);
     const contentElements = createArticlesPageHeader(width, height);
-    return [...borderElements, ...contentElements];
+    const signatureElements = createSignatureFooter(width, height);
+    return [...borderElements, ...contentElements, ...signatureElements];
+  }
+
+  function createSignatureFooter(width: number, height: number, leftMargin = 40, marginRight = 40): PermisElement[] {
+    const signatureTop = Math.max(height - 150, 0);
+    const signatureSpacing = 32;
+    const rightWidth = 260;
+    const rightX = width - marginRight - rightWidth;
+    const elements: PermisElement[] = [
+      {
+        id: uuidv4(),
+        type: 'text',
+        x: rightX,
+        y: signatureTop,
+        width: rightWidth,
+        text: 'رئـيس اللجنة المديرة',
+        language: 'ar',
+        direction: 'rtl',
+        fontSize: 24,
+        fontFamily: ARABIC_FONTS[0],
+        color: '#000',
+        draggable: true,
+        textAlign: 'right',
+        opacity: 1,
+        wrap: 'none',
+        lineHeight: 1.2,
+        meta: { isFooter: true }
+      } as any,
+      {
+        id: uuidv4(),
+        type: 'text',
+        x: rightX,
+        y: signatureTop + signatureSpacing,
+        width: rightWidth,
+        text: 'مراد حنيفي',
+        language: 'ar',
+        direction: 'rtl',
+        fontSize: 24,
+        fontFamily: ARABIC_FONTS[0],
+        color: '#000',
+        draggable: true,
+        textAlign: 'right',
+        opacity: 1,
+        wrap: 'none',
+        lineHeight: 1.2,
+        meta: { isFooter: true }
+      } as any,
+      {
+        id: uuidv4(),
+        type: 'text',
+        x: leftMargin,
+        y: signatureTop + signatureSpacing,
+        width: 280,
+        text: 'حـرر بالـجزائـر في:',
+        language: 'ar',
+        direction: 'rtl',
+        fontSize: 24,
+        fontFamily: ARABIC_FONTS[0],
+        color: '#000',
+        draggable: true,
+        textAlign: 'left',
+        opacity: 1,
+        wrap: 'none',
+        lineHeight: 1.2,
+        meta: { isFooter: true }
+      } as any
+    ];
+    return elements;
   }
 
   function filterElementsByPage(elements: PermisElement[], pageIndex: number): PermisElement[] {
@@ -514,7 +582,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
         const text = String(el.text || '');
         const boxW = Math.max(10, el.width || (contentWidth - padding *2));
         // Slightly smaller average character width to avoid overestimating text height
-        const avgCharsPerLine = Math.max(1, Math.floor(boxW / (fontSize * 0.45)));
+        const avgCharsPerLine = Math.max(1, Math.floor(boxW / (fontSize * 0.42)));
         const parts = text.split(/\r?\n/);
         let totalLines = 0;
         parts.forEach(part => {
@@ -584,7 +652,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
     // For each article page, keep non-article elements and add blocks
     for (let rp = 0; rp < neededArticlePages; rp++) {
       const absIdx = PAGES.ARTICLES + rp;
-      const keep = (next[absIdx] || []).filter(el => !el.isArticle && !el.meta?.isArticle && !el.meta?.isFooter);
+      const keep = (next[absIdx] || []).filter(el => !el.isArticle && !el.meta?.isArticle);
       next[absIdx] = [...keep, ...(perPageBlocks[rp] || [])];
     }
     // Add footer labels to the last page (middle bottom + right bottom)
@@ -596,66 +664,66 @@ function createCornerDecorations(color: string, width: number, height: number): 
       const rightWidth = 220;
       const rightY = (DEFAULT_CANVAS.height - 70);
       const rightX = DEFAULT_CANVAS.width - rightWidth - 40;
-      const footerEls: PermisElement[] = [
-        {
-          id: uuidv4(),
-          type: 'text',
-          x:rightX-150,
-          y: centerLabelY-50 ,
-          width: centerWidth,
-          text: 'رئـيس اللجنة المديرة',
-          language: 'ar',
-          direction: 'rtl',
-          fontSize: 24,
-          fontFamily: ARABIC_FONTS[0],
-          color: '#000',
-          draggable: true,
-          textAlign: 'center',
-          opacity: 1,
-          wrap: 'none',
-          lineHeight: 1.2,
-          meta: { isFooter: true, pageIndex: lastAbs }
-        } as any,
-        {
-          id: uuidv4(),
-          type: 'text',
-          x: centerX-150,
-          y: centerLabelY-30,
-          width: centerWidth,
-          text: 'حـرر بالـجزائـر في:',
-          language: 'ar',
-          direction: 'rtl',
-          fontSize: 24,
-          fontFamily: ARABIC_FONTS[0],
-          color: '#000',
-          draggable: true,
-          textAlign: 'center',
-          opacity: 1,
-          wrap: 'none',
-          lineHeight: 1.2,
-          meta: { isFooter: true, pageIndex: lastAbs }
-        } as any,
-        {
-          id: uuidv4(),
-          type: 'text',
-          x: rightX,
-          y: rightY,
-          width: rightWidth,
-          text: 'مراد حنيفي',
-          language: 'ar',
-          direction: 'rtl',
-          fontSize: 24,
-          fontFamily: ARABIC_FONTS[0],
-          color: '#000',
-          draggable: true,
-          textAlign: 'right',
-          opacity: 1,
-          wrap: 'none',
-          lineHeight: 1.2,
-          meta: { isFooter: true, pageIndex: lastAbs }
-        } as any,
-      ];
-      next[lastAbs] = [...next[lastAbs], ...footerEls];
+      // const footerEls: PermisElement[] = [
+      //   {
+      //     id: uuidv4(),
+      //     type: 'text',
+      //     x:rightX-150,
+      //     y: centerLabelY-50 ,
+      //     width: centerWidth,
+      //     text: 'رئـيس اللجنة المديرة',
+      //     language: 'ar',
+      //     direction: 'rtl',
+      //     fontSize: 24,
+      //     fontFamily: ARABIC_FONTS[0],
+      //     color: '#000',
+      //     draggable: true,
+      //     textAlign: 'center',
+      //     opacity: 1,
+      //     wrap: 'none',
+      //     lineHeight: 1.2,
+      //     meta: { isFooter: true, pageIndex: lastAbs }
+      //   } as any,
+      //   {
+      //     id: uuidv4(),
+      //     type: 'text',
+      //     x: centerX-150,
+      //     y: centerLabelY-30,
+      //     width: centerWidth,
+      //     text: 'حـرر بالـجزائـر في:',
+      //     language: 'ar',
+      //     direction: 'rtl',
+      //     fontSize: 24,
+      //     fontFamily: ARABIC_FONTS[0],
+      //     color: '#000',
+      //     draggable: true,
+      //     textAlign: 'center',
+      //     opacity: 1,
+      //     wrap: 'none',
+      //     lineHeight: 1.2,
+      //     meta: { isFooter: true, pageIndex: lastAbs }
+      //   } as any,
+      //   {
+      //     id: uuidv4(),
+      //     type: 'text',
+      //     x: rightX,
+      //     y: rightY,
+      //     width: rightWidth,
+      //     text: 'مراد حنيفي',
+      //     language: 'ar',
+      //     direction: 'rtl',
+      //     fontSize: 24,
+      //     fontFamily: ARABIC_FONTS[0],
+      //     color: '#000',
+      //     draggable: true,
+      //     textAlign: 'right',
+      //     opacity: 1,
+      //     wrap: 'none',
+      //     lineHeight: 1.2,
+      //     meta: { isFooter: true, pageIndex: lastAbs }
+      //   } as any,
+      // ];
+      next[lastAbs] = [...next[lastAbs]];
     }
     pushHistory(JSON.parse(JSON.stringify(next)) as PermisPages);
     return next;
@@ -862,7 +930,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
   }, [history]);
 
   const generateQRCodeData = (data: any, codeOverride?: string): string => {
-    const baseUrl = 'https://sig.anam.dz/';
+    const baseUrl = 'https://pom.anam.gov.dz/';
     const code = (codeOverride && String(codeOverride)) || String(data?.code_demande || data?.codeDemande || '');
     // Keep URL short; include just a code param and type
     const params = new URLSearchParams({
@@ -1304,9 +1372,9 @@ const detailsFontSize = 26;
         outerBorderWidth: 1.2,
         cellPadding: 8,
         tableColumns: [
-          { key: 'x', title: 'ع', width: baseColWidths[0], align: 'right' },
-          { key: 'y', title: 'س', width: baseColWidths[1], align: 'right' },
-          { key: 'point', title: 'النقطة', width: baseColWidths[2], align: 'right' },
+          { key: 'y', title: 'ع', width: baseColWidths[0], align: 'center' },
+          { key: 'x', title: 'س', width: baseColWidths[1], align: 'center' },
+          { key: 'point', title: 'النقطة', width: baseColWidths[2], align: 'center' },
         ],
         tableData: coords.map((c: any, idx: number) => ({ x: String(c.x ?? ''), y: String(c.y ?? ''), point: String(idx + 1) })),
       } as any;
@@ -1359,6 +1427,7 @@ const detailsFontSize = 26;
             draggable: true
           } as any);
         } catch {}
+
         // Double bottom lines
         els.push({ id: uuidv4(), type: 'line', x: bandX, y: bottomY1, width: bandW, height: 0, stroke: '#000', strokeWidth: 1.2, draggable: true } as any);
         els.push({ id: uuidv4(), type: 'line', x: bandX, y: bottomY2, width: bandW, height: 0, stroke: '#000', strokeWidth: 1.2, draggable: true } as any);
@@ -1392,7 +1461,8 @@ const detailsFontSize = 26;
     const headerH = 48;
     const headerY = y + 40;
     els.push({ id: uuidv4(), type: 'rectangle', x: tableX, y: headerY, width: tableW, height: headerH, stroke: '#000', strokeWidth: 1.2, fill: '#f5f5f5' } as any);
-    els.push({ id: uuidv4(), type: 'text', x: tableX + 6, y: headerY + 4, width: tableW - 12, text: 'إحـداثيات قمم المحيط المنجمي حسب نظام UTM شمال الصحراء — Fuseau 32', language: 'ar', direction: 'rtl', fontSize: 20, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
+    const headerTextOffset = headerH > 0 ? (headerH - 20) / 2 : 0;
+    els.push({ id: uuidv4(), type: 'text', x: tableX + 6, y: headerY + headerTextOffset, width: tableW - 12, text: 'إحـداثيات قمم المحيط المنجمي حسب نظام UTM شمال الصحراء', language: 'ar', direction: 'rtl', fontSize: 20, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
 
     // Multi-column coordinates table (colors/separators like the model)
     const tableStartY = headerY + headerH;
@@ -1409,9 +1479,10 @@ const detailsFontSize = 26;
       els.push({ id: uuidv4(), type: 'line', x: bx + colPtW, y: tableStartY, width: vHeight, height: 0, rotation: 90, stroke: '#4F4040', strokeWidth: 1, meta: { nonInteractive: true, isGrid: true } } as any);
       els.push({ id: uuidv4(), type: 'line', x: bx + colPtW + colXW, y: tableStartY, width: vHeight, height: 0, rotation: 90, stroke: '#4F4040', strokeWidth: 1, meta: { nonInteractive: true, isGrid: true } } as any);
       // Column headers
-      els.push({ id: uuidv4(), type: 'text', x: bx + 8, y: tableStartY + 4, width: colPtW - 16, text: 'ع', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right' } as any);
-      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + 8, y: tableStartY + 4, width: colXW - 16, text: 'س', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right' } as any);
-      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW + 8, y: tableStartY + 4, width: colYW - 16, text: 'النقطة', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right' } as any);
+      const headerOffset = Math.max((rowH - 14) / 2, 0);
+      els.push({ id: uuidv4(), type: 'text', x: bx, y: tableStartY + headerOffset, width: colPtW, text: 'ع', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
+      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW, y: tableStartY + headerOffset, width: colXW, text: 'س', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
+      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW, y: tableStartY + headerOffset, width: colYW, text: 'النقطة', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
 
       // Rows
       for (let r = 0; r < rowsPerCol; r++) {
@@ -1433,10 +1504,11 @@ const detailsFontSize = 26;
           const vPoint = String(idx + 1);
           const vX = String(item.x ?? '');
           const vY = String(item.y ?? '');
-          // Left to right columns: ع (X), س (Y), النقطة (Point)
-          els.push({ id: uuidv4(), type: 'text', x: bx + 8, y: ry + 4, width: colPtW - 16, text: vX, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'right' } as any);
-          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + 8, y: ry + 4, width: colXW - 16, text: vY, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'right' } as any);
-          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW + 8, y: ry + 4, width: colYW - 16, text: vPoint, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'right' } as any);
+          // Left to right columns: ع (Y), س (X), النقطة (Point)
+          const cellOffset = Math.max((rowH - 14) / 2, 0);
+          els.push({ id: uuidv4(), type: 'text', x: bx, y: ry + cellOffset, width: colPtW, text: vY, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center' } as any);
+          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW, y: ry + cellOffset, width: colXW, text: vX, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center' } as any);
+          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW, y: ry + cellOffset, width: colYW, text: vPoint, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center' } as any);
         }
         // Horizontal subtle grid line
         els.push({ id: uuidv4(), type: 'line', x: bx, y: ry, width: blockW, height: 0, stroke: '#4F4040', strokeWidth: 1, meta: { nonInteractive: true, isGrid: true } } as any);
@@ -2200,7 +2272,83 @@ const detailsFontSize = 26;
 
   const handlePropertyChange = useCallback((property: keyof PermisElement, value: any) => {
     if (selectedIds.length === 0) return;
-    setElementsForCurrent(prev => prev.map(el => (selectedIds.includes(el.id) ? { ...el, [property]: value } as PermisElement : el)));
+    const selectedIdSet = new Set(selectedIds);
+    const affectsTableLayout = property === 'tableData' || property === 'rowsPerCol' || property === 'rowHeight' || property === 'headerHeight' || property === 'blockCols';
+    setElementsForCurrent(prev => {
+      const tablesBefore = new Map<string, { bottom: number; height: number }>();
+      if (affectsTableLayout) {
+        prev.forEach(el => {
+          if (selectedIdSet.has(el.id) && el.type === 'table') {
+            const prevHeight = Number(el.height || 0);
+            tablesBefore.set(el.id, { bottom: (el.y || 0) + prevHeight, height: prevHeight });
+          }
+        });
+      }
+      let next = prev.map(el => (selectedIdSet.has(el.id) ? { ...el, [property]: value } as PermisElement : el));
+      // If a table's data/metrics changed, auto-adjust its height and push content below
+      if (affectsTableLayout) {
+        next = next.map(el => {
+          if (!selectedIdSet.has(el.id) || el.type !== 'table') return el;
+          const rows: any[] = Array.isArray((el as any).tableData) ? (el as any).tableData : [];
+          const blockCols = Math.max(1, Number((el as any).blockCols || 1));
+          const rowsPerCol = Math.max(1, Math.ceil((rows.length || 1) / blockCols));
+          const rowH = Math.max(12, Number((el as any).rowHeight || 34));
+          const hdrH = Math.max(0, Number((el as any).headerHeight || 48));
+          const newHeight = hdrH + rowH * (rowsPerCol + 1);
+          if (Math.abs((el.height || 0) - newHeight) > 0.5) {
+            return { ...el, height: newHeight } as any;
+          }
+          return el;
+        });
+        const adjustments: { bottomBefore: number; delta: number }[] = [];
+        next.forEach(el => {
+          if (!selectedIdSet.has(el.id) || el.type !== 'table') return;
+          const before = tablesBefore.get(el.id);
+          if (!before) return;
+          const heightAfter = Number((el as any).height || 0);
+          const bottomAfter = (el.y || 0) + heightAfter;
+          const delta = bottomAfter - before.bottom;
+          if (Math.abs(delta) > 0.5) {
+            adjustments.push({ bottomBefore: before.bottom, delta });
+          }
+        });
+        if (adjustments.length > 0) {
+          next = next.map(el => {
+            if (selectedIdSet.has(el.id)) return el;
+            const currentY = el.y || 0;
+            let shift = 0;
+            adjustments.forEach(adj => {
+              if (currentY >= adj.bottomBefore - 0.1) {
+                shift += adj.delta;
+              }
+            });
+            if (Math.abs(shift) > 0.5) {
+              return { ...el, y: currentY + shift } as PermisElement;
+            }
+            return el;
+          });
+        }
+        // Push down footers if they overlap with the last edited table
+        const lastTable = next.reduce<PermisElement | null>((acc, el) => {
+          if (!selectedIdSet.has(el.id) || el.type !== 'table') return acc;
+          if (!acc) return el;
+          const accBottom = (acc.y || 0) + ((acc as any).height || 0);
+          const elBottom = (el.y || 0) + ((el as any).height || 0);
+          return elBottom > accBottom ? el : acc;
+        }, null);
+        if (lastTable) {
+          const bottom = (lastTable.y || 0) + ((lastTable as any).height || 0);
+          next = next.map(el => {
+            if ((el as any).meta?.isFooter && (el.y || 0) < bottom + 8) {
+              const offset = (bottom + 8) - (el.y || 0);
+              return { ...el, y: (el.y || 0) + offset } as any;
+            }
+            return el;
+          });
+        }
+      }
+      return next as PermisPages[number];
+    });
     // If inline text editor is open for the selected text, reflect style changes immediately
     if (textOverlay && selectedIds.includes(textOverlay.id)) {
       const styleProps = new Set(['fontFamily','fontSize','color','lineHeight','direction','textAlign']);
@@ -2953,23 +3101,17 @@ const pageLabel = (idx: number) => {
                     <div className={styles.inlineInputs}>
                       <div className={styles.small}>{Array.isArray((firstSelected as any).tableData) ? (firstSelected as any).tableData.length : 0}</div>
                       <button className={styles.iconBtn} onClick={() => {
-                        setElementsForCurrent(prev => prev.map(el => {
-                          if (el.id !== firstSelected.id) return el;
-                          const rows = Array.isArray((el as any).tableData) ? [...(el as any).tableData] : [];
-                          rows.push({});
-                          return { ...(el as any), tableData: rows } as any;
-                        }));
+                        const rows = Array.isArray((firstSelected as any).tableData) ? [...(firstSelected as any).tableData] : [];
+                        rows.push({});
+                        handlePropertyChange('tableData', rows);
                       }}>Add Row</button>
                       <button className={styles.iconBtn} onClick={() => {
-                        setElementsForCurrent(prev => prev.map(el => {
-                          if (el.id !== firstSelected.id) return el;
-                          const rows = Array.isArray((el as any).tableData) ? [...(el as any).tableData] : [];
-                          rows.pop();
-                          return { ...(el as any), tableData: rows } as any;
-                        }));
+                        const rows = Array.isArray((firstSelected as any).tableData) ? [...(firstSelected as any).tableData] : [];
+                        rows.pop();
+                        handlePropertyChange('tableData', rows);
                       }}>Remove Last</button>
                       <button className={styles.iconBtn} onClick={() => {
-                        setElementsForCurrent(prev => prev.map(el => (el.id === firstSelected.id ? { ...(el as any), tableData: [] } as any : el)));
+                        handlePropertyChange('tableData', []);
                       }}>Clear</button>
                     </div>
                   </div>
@@ -3029,15 +3171,12 @@ const pageLabel = (idx: number) => {
                       </select>
                       <input type="text" value={cellEditValue} onChange={(e) => setCellEditValue(e.target.value)} />
                       <button className={styles.iconBtn} onClick={() => {
-                        setElementsForCurrent(prev => prev.map(el => {
-                          if (el.id !== firstSelected.id) return el;
-                          const rows = Array.isArray((el as any).tableData) ? [...(el as any).tableData] : [];
-                          while (cellEditRow >= rows.length) rows.push({});
-                          const r = { ...(rows[cellEditRow] || {}) } as any;
-                          r[cellEditKey] = cellEditValue;
-                          rows[cellEditRow] = r;
-                          return { ...(el as any), tableData: rows } as any;
-                        }));
+                        const rows = Array.isArray((firstSelected as any).tableData) ? [...(firstSelected as any).tableData] : [];
+                        while (cellEditRow >= rows.length) rows.push({});
+                        const r = { ...(rows[cellEditRow] || {}) } as any;
+                        r[cellEditKey] = cellEditValue;
+                        rows[cellEditRow] = r;
+                        handlePropertyChange('tableData', rows);
                       }}>Apply</button>
                     </div>
                   </div>

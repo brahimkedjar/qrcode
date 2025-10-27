@@ -1,5 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import ldap from 'ldapjs';
+import fs from 'fs';
+import path from 'path';
 
 export type LdapUser = {
   username: string;
@@ -13,13 +15,41 @@ export class AuthService {
   private readonly ldapHost: string;
   private readonly ldapDn: string;
   private readonly ldapDomain: string;
+  private readonly allowedUsers: Set<string>;
 
   constructor() {
     this.ldapHost = process.env.LDAP_URL || 'ldap://10.16.220.10:389';
     this.ldapDn = process.env.LDAP_BASE_DN || 'dc=corp,dc=anam,dc=dz';
     this.ldapDomain = process.env.LDAP_DOMAIN || 'corp.anam.dz';
+    this.allowedUsers = this.loadAllowedUsers();
     // eslint-disable-next-line no-console
     console.log(`Initialized with LDAP Host: ${this.ldapHost}, LDAP DN: ${this.ldapDn}`);
+  }
+
+  private loadAllowedUsers(): Set<string> {
+    const envAllow = process.env.ALLOWED_USERS;
+    if (envAllow) {
+      const list = envAllow
+        .split(',')
+        .map((u) => u.trim().toUpperCase())
+        .filter(Boolean);
+      if (list.length > 0) {
+        return new Set(list);
+      }
+    }
+    try {
+      const filePath = path.resolve(process.cwd(), 'server', 'allowed-users.json');
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const parsed = JSON.parse(raw) as string[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return new Set(parsed.map((u) => String(u || '').trim().toUpperCase()).filter(Boolean));
+      }
+    } catch (err) {
+      try {
+        console.warn('[AuthService] allowed-users.json not loaded:', (err as Error)?.message || err);
+      } catch {}
+    }
+    return new Set();
   }
 
   async validateUser(username: string, password: string): Promise<LdapUser> {
@@ -27,6 +57,12 @@ export class AuthService {
     console.log(`Attempting to validate user: ${username}`);
     // eslint-disable-next-line no-console
     console.log(`LDAP Host: ${this.ldapHost}, LDAP DN: ${this.ldapDn}`);
+
+    const normalizedUsername = username.trim().toUpperCase();
+    if (this.allowedUsers.size > 0 && !this.allowedUsers.has(normalizedUsername)) {
+      console.warn(`[AuthService] Access denied for user ${normalizedUsername}: not in allowed list`);
+      throw new UnauthorizedException('Utilisateur non autorisé');
+    }
 
     const userDn = (process.env.LDAP_BIND_FORMAT || '{username}@' + this.ldapDomain).replace(
       '{username}',

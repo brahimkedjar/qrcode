@@ -143,6 +143,12 @@ export class PermisService {
       StatutArab: (statutNorm && statutNorm.StatutArab) || undefined,
     } : null;
 
+    // Resolve substance (Arabic) with broad fallbacks; if Arabic missing, use FR/Latin to avoid blanks
+    const substanceResolved = toStr(
+      (r as any).SubstancesArabe ?? (r as any).substances_arabe ?? (r as any).SubstancesAR ??
+      (r as any).Substances ?? (r as any).SubstancesFR ?? (r as any).substance ?? (r as any).substance_fr ?? ''
+    );
+
     const val: any = {
       id: r[c.id],
       typePermis: typeData || toStr(r[c.typePermis]),
@@ -160,7 +166,7 @@ export class PermisService {
       coordinates: await this.getCoordinatesByPermisId(String(r[c.id])).catch(() => []),
       duree_display_ar: dureeDisplayAr,
       detenteur_ar: (detNorm && (detNorm.NomArab || detNorm.nom_ar)) || detData?.NomArab || detData?.nom_ar || '',
-      substance_ar: toStr((r as any).SubstancesArabe ?? (r as any).substances_arabe ?? (r as any).SubstancesAR ?? '')
+      substance_ar: substanceResolved
     };
     // Add compatibility fields expected by designer
     val.code_demande = val.codeDemande;
@@ -247,6 +253,11 @@ export class PermisService {
     const pad5 = codeNum.padStart(5, '0');
     const safePad = this.access.escapeValue(pad5);
     const safeNum = this.access.escapeValue(codeNum);
+    const fullCode = `${typeCode}${codeNum}`;
+    const safeFull = this.access.escapeValue(fullCode);
+    const safeFullUpper = this.access.escapeValue(fullCode.toUpperCase());
+    const likeSuffix = this.access.escapeValue(`%${codeNum}`);
+    const likePadSuffix = this.access.escapeValue(`%${pad5}`);
     const numN = Number(codeNum);
     const typeCond = /^\d+$/.test(String(typeId)) ? String(typeId) : this.access.escapeValue(String(typeId));
     // Try with both padded and raw numeric/text comparisons
@@ -258,9 +269,19 @@ export class PermisService {
     }
     // Attempt 2: treat Code as text (with quotes, include padded and raw)
     if (!rows || !rows.length) {
-      const whereText = `(${c.codeDemande} = ${safePad} OR ${c.codeDemande} = ${safeNum})`;
+      const whereText = `(${c.codeDemande} = ${safePad} OR ${c.codeDemande} = ${safeNum} OR ${c.codeDemande} = ${safeFull})`;
       const sqlTxt = `SELECT TOP 1 * FROM ${t} WHERE ${c.typePermis} = ${typeCond} AND ${whereText}`;
       try { rows = await this.access.query(sqlTxt); } catch {}
+    }
+    // Attempt 3: match uppercase / combined code without spacing
+    if (!rows || !rows.length) {
+      const sqlFull = `SELECT TOP 1 * FROM ${t} WHERE ${c.typePermis} = ${typeCond} AND (UCase(${c.codeDemande}) = ${safeFullUpper})`;
+      try { rows = await this.access.query(sqlFull); } catch {}
+    }
+    // Attempt 4: match codes that end with the numeric part (e.g., PEC236 -> 7236)
+    if (!rows || !rows.length) {
+      const sqlLike = `SELECT TOP 1 * FROM ${t} WHERE ${c.typePermis} = ${typeCond} AND (${c.codeDemande} LIKE ${likeSuffix} OR ${c.codeDemande} LIKE ${likePadSuffix}) ORDER BY ${c.codeDemande}`;
+      try { rows = await this.access.query(sqlLike); } catch {}
     }
     if (!rows || !rows.length) return null;
     const idVal = rows[0]?.[c.id] ?? rows[0]?.id;

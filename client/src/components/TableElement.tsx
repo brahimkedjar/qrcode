@@ -35,7 +35,7 @@ export const TableElement: React.FC<TableElementProps> = ({
     const stroke = element.stroke || '#000';
     const strokeWidth = Number(element.strokeWidth || 1.2);
     const fontFamily = element.tableFontFamily || element.fontFamily || 'Arial';
-    const fontSize = Number(element.tableFontSize || 14);
+    const fontSize =17;
     const textAlign = element.tableTextAlign || 'left';
     const data = Array.isArray(element.tableData) ? element.tableData : [];
     // Fit rows exactly to the dataset (no extra empty rows)
@@ -43,10 +43,11 @@ export const TableElement: React.FC<TableElementProps> = ({
     const columns = (element.tableColumns && element.tableColumns.length > 0)
       ? element.tableColumns
       : [
-        { key: 'point', title: 'Point', width: baseColWidths[0], align: 'left' },
-        { key: 'x', title: 'X', width: baseColWidths[1], align: 'left' },
-        { key: 'y', title: 'Y', width: baseColWidths[2], align: 'left' },
+        {  key: 'x', title: 'ع', width: baseColWidths[0], align: 'right' },
+        {  key: 'y', title: 'س', width: baseColWidths[1], align: 'right'  },
+        { key: 'point', title: 'النقطة', width: baseColWidths[2], align: 'right' },
       ];
+   
     const blockBaseW = (columns.map(c => c.width || 0).reduce((a, b) => a + b, 0)) || (baseColWidths.reduce((a, b) => a + b, 0));
     // For small coordinate lists, widen tables visually without adding empty rows
     const minBlocksForWidth = (Array.isArray(data) && data.length < 10) ? 2 : 1;
@@ -55,7 +56,11 @@ export const TableElement: React.FC<TableElementProps> = ({
     // scale columns to fit desired width equally per block
     const perBlockWidth = desiredWidth / blockCols;
     const scale = blockBaseW > 0 ? perBlockWidth / blockBaseW : 1;
-    const scaledCols = columns.map(c => ({ ...c, width: Math.max(10, Math.round((c.width || 0) * scale)) }));
+    const scaledCols = columns.map(c => ({
+      ...c,
+      width: Math.max(10, Math.round((c.width || 0) * scale)),
+      align: c.align || 'center',
+    }));
     const blockW = scaledCols.reduce((a, b) => a + (b.width || 0), 0);
 
     return {
@@ -124,21 +129,24 @@ export const TableElement: React.FC<TableElementProps> = ({
     texts.push(
       <Text
         key="hdr-text"
-        x={6}
-        y={headerY + 4}
-        width={cfg.width - 12}
+        x={0}
+        y={headerY}
+        width={cfg.width}
+        height={cfg.headerHeight}
         text={cfg.headerText}
         fontSize={Math.max(12, cfg.fontSize + 6)}
         fontFamily={cfg.fontFamily}
         fill="#000"
         align={cfg.headerTextAlign as any}
+        verticalAlign="middle"
         direction="rtl"
       />
     );
   }
 
+  // Render blocks from right to left to respect RTL layout
   for (let b = 0; b < cfg.blockCols; b++) {
-    const bx = b * cfg.blockW;
+    const bx = cfg.width - cfg.blockW * (b + 1);
     // Header row inside block
     shapes.push(
       <Rect key={`col-hdr-${b}`} x={bx} y={tableStartY} width={cfg.blockW} height={cfg.rowHeight} stroke={cfg.outerBorderColor} strokeWidth={cfg.outerBorderWidth} fill="#eeeeee" />
@@ -148,7 +156,19 @@ export const TableElement: React.FC<TableElementProps> = ({
     cfg.columns.forEach((col, cIdx) => {
       // column header text
       texts.push(
-        <Text key={`hdrtext-${b}-${cIdx}`} x={cx + 8} y={tableStartY + 4} width={(col.width || 0) - 16} text={String(col.title)} fontSize={cfg.fontSize} fontFamily={cfg.fontFamily} fill="#000" align={col.align || 'left'} />
+        <Text
+          key={`hdrtext-${b}-${cIdx}`}
+          x={cx}
+          y={tableStartY}
+          width={(col.width || 0)}
+          height={cfg.rowHeight}
+          text={String(col.title)}
+          fontSize={cfg.fontSize}
+          fontFamily={cfg.fontFamily}
+          fill="#000"
+          align={col.align || 'center'}
+          verticalAlign="middle"
+        />
       );
       // vertical line after column
       cx += (col.width || 0);
@@ -186,7 +206,19 @@ export const TableElement: React.FC<TableElementProps> = ({
           let val = row[col.key] != null ? String(row[col.key]) : '';
           if (!val && col.key === 'point') val = String(idx + 1);
           texts.push(
-            <Text key={`cell-${b}-${r}-${cIdx}`} x={cx2 + cfg.cellPadding} y={ry + 4} width={(col.width || 0) - cfg.cellPadding * 2} text={val} fontSize={cfg.fontSize} fontFamily={cfg.fontFamily} fill="#000" align={col.align || 'left'} />
+            <Text
+              key={`cell-${b}-${r}-${cIdx}`}
+              x={cx2}
+              y={ry}
+              width={(col.width || 0)}
+              height={cfg.rowHeight}
+              text={val}
+              fontSize={cfg.fontSize}
+              fontFamily={cfg.fontFamily}
+              fill="#000"
+              align={col.align || 'center'}
+              verticalAlign="middle"
+            />
           );
           cx2 += (col.width || 0);
         });

@@ -16,6 +16,7 @@ export default function App() {
   const [view, setView] = useState<'designer' | 'verify' | 'pdfs'>('designer');
   const [permisId, setPermisId] = useState<string>('');
   const [initialData, setInitialData] = useState<any | null>(null);
+  const [procedureRef, setProcedureRef] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,9 +35,43 @@ export default function App() {
     setError(null);
     setLoading(true);
     try {
-      const { data } = await axios.get(`${API_URL}/api/permis/${encodeURIComponent(permisId)}`);
+      const raw = permisId.trim();
+      if (!raw) {
+        throw new Error('Veuillez saisir un identifiant ou un code de permis.');
+      }
+      let data: any = null;
+      const isNumericInput = /^\d+$/.test(raw);
+      if (!isNumericInput) {
+        try {
+          const searchResp = await axios.get(`${API_URL}/api/permis/search`, { params: { q: raw } });
+          if (searchResp.data && searchResp.data.exists !== false) {
+            data = searchResp.data;
+          }
+        } catch (searchErr) {
+          console.warn('Permis search failed, falling back to direct lookup', searchErr);
+        }
+      }
+      if (!data && isNumericInput) {
+        const directResp = await axios.get(`${API_URL}/api/permis/${encodeURIComponent(raw)}`);
+        data = directResp.data;
+      }
+      if (!data || data.exists === false) {
+        throw new Error('Permis introuvable pour la recherche saisie.');
+      }
+      const toNum = (value: any): number | null => {
+        const num = Number(value);
+        return Number.isFinite(num) ? num : null;
+      };
+      const derivedProcedureId =
+        toNum(data?.procedureId) ??
+        toNum(data?.procedure_id) ??
+        toNum(data?.procedureID) ??
+        (isNumericInput ? Number(raw) : null);
+      setProcedureRef(derivedProcedureId);
       setInitialData(data);
     } catch (e: any) {
+      setInitialData(null);
+      setProcedureRef(null);
       setError(e?.message || 'Failed to load permis');
     } finally {
       setLoading(false);
@@ -111,7 +146,7 @@ export default function App() {
                     return new Blob([], { type: 'application/pdf' });
                   }}
                   onSavePermis={async (_permisData: any) => { return {} as any; }}
-                  procedureId={Number(permisId)}
+                  procedureId={procedureRef}
                 />
               ) : null}
             </div>
