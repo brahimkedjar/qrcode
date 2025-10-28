@@ -60,7 +60,7 @@ const isCoordinateTableElement = (element: PermisElement): boolean => {
   if (!columns.length) return false;
   const keySet = new Set(
     columns
-      .map(col => (col && col.key != null ? String(col.key).toLowerCase() : ''))
+      .map((col: { key: null; }) => (col && col.key != null ? String(col.key).toLowerCase() : ''))
       .filter(Boolean)
   );
   return COORDINATE_COLUMN_KEYS.every(k => keySet.has(k));
@@ -756,10 +756,14 @@ function createCornerDecorations(color: string, width: number, height: number): 
 
     const idToItem = new Map(replacedSource.map(a => [a.id, a] as const));
     const decisionIdx = articleIds.findIndex(id => id === 'decision');
-    const beforeIds = articleIds.slice(0, decisionIdx).filter(id => idToItem.has(id));
-    const afterIds = articleIds.slice(decisionIdx + 1).filter(id => idToItem.has(id));
+    const beforeIds = (decisionIdx >= 0)
+      ? articleIds.slice(0, decisionIdx).filter(id => idToItem.has(id))
+      : [];
+    const afterIds = (decisionIdx >= 0)
+      ? articleIds.slice(decisionIdx + 1).filter(id => idToItem.has(id))
+      : articleIds.filter(id => idToItem.has(id));
 
-    const baseFont = isTXC ? 18 : 24;
+    const baseFont = 28;
     const baseLH = isTXC ? 1.3 : 1.6;
     let yCursor = startY;
     const builtIntro: PermisElement[] = [];
@@ -791,7 +795,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
     const dairaStr = String((initialData as any)?.daira || '').trim();
     const wilayaStr = String((initialData as any)?.wilaya || (initialData as any)?.localisation || '').trim();
     // Build intro items (before decision)
-  beforeIds.forEach(id => {
+  beforeIds.forEach((id, i) => {
     const el = idToItem.get(id)!;
     const title = (el.title || '').trim();
     const hasColon = /[:ï¼š]$/.test(title);
@@ -824,20 +828,24 @@ function createCornerDecorations(color: string, width: number, height: number): 
     if (dairaStr) combined = combined.replace(/(\u062F\u0627\u0626\u0631\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${dairaStr}`);
     if (wilayaStr) combined = combined.replace(/(\u0648\u0644\u0627\u064A\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${wilayaStr}`);
 
-    const h = wrapH(combined, contentWidth - padding * 2, baseFont, ARABIC_FONTS[0], baseLH);
-    builtIntro.push({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: contentWidth - padding * 2, text: combined, language: 'ar', direction: 'rtl', fontSize: baseFont, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right', opacity: 1, rotation: 0, wrap: 'word', lineHeight: baseLH, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any);
-    yCursor += h + (isTXC ? 4 : 6);
+    const h = wrapH(combined, contentWidth - padding * 2, baseFont, 'Arabic Typesetting', baseLH);
+    builtIntro.push({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: contentWidth - padding * 2, text: combined, language: 'ar', direction: 'rtl', fontSize: baseFont, fontFamily: 'Arabic Typesetting', color: '#000', draggable: true, textAlign: 'right', opacity: 1, rotation: 0, wrap: 'word', lineHeight: baseLH, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any);
+    // Place decision header directly after last intro block (no extra gap)
+    const isLastBefore = i === beforeIds.length - 1;
+    const gap = isLastBefore ? 0 : (isTXC ? 4 : 6);
+    yCursor += h + gap;
   });
 
     // Decision header
     const decisionItem = idToItem.get('decision');
     if (decisionItem) {
       const text = (decisionItem.title || '').trim() || 'يــقــرر مــا يــلــي :';
-      const fz = Math.max(baseFont + 4, 22);
+      const fz = Math.max(baseFont + 4, 20);
       const lh = 1.2;
-      const h = wrapH(text, contentWidth - padding * 2, fz, ARABIC_FONTS[0], lh);
-      builtIntro.push({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: contentWidth - padding * 2, text, language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center', opacity: 1, rotation: 0, wrap: 'word', lineHeight: lh, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any);
-      yCursor += h + (isTXC ? 4 : 6);
+      const h = wrapH(text, contentWidth - padding * 2, fz, 'Arabic Typesetting', lh);
+      builtIntro.push({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: contentWidth - padding * 2, text, language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: 'Arabic Typesetting', color: '#000', draggable: true, textAlign: 'center', opacity: 1, rotation: 0, wrap: 'word', lineHeight: lh, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any);
+      // No extra gap below the decision header
+      yCursor += h + 0;
     }
 
     // Combined block after decision
@@ -909,17 +917,17 @@ function createCornerDecorations(color: string, width: number, height: number): 
     let fitLH = baseLH;
     // Keep fonts from becoming too small when switching templates
     const minFont = Math.max(baseFont - 2, isTXC ? 18 : 22);
-    const minLH = 1.2;
+    const minLH = 1.9;
     let neededH = combinedH;
     while (neededH > available && fitFont > minFont) {
       fitFont -= 1;
-      neededH = wrapH(combinedText, innerW, fitFont, ARABIC_FONTS[0], fitLH);
+      neededH = wrapH(combinedText, innerW, fitFont, 'Arabic Typesetting', fitLH);
     }
     while (neededH > available && fitLH > minLH) {
       fitLH = Math.max(minLH, Math.round((fitLH - 0.05) * 100) / 100);
-      neededH = wrapH(combinedText, innerW, fitFont, ARABIC_FONTS[0], fitLH);
+      neededH = wrapH(combinedText, innerW, fitFont, 'Arabic Typesetting', fitLH);
     }
-    const combinedEl = combinedText ? ({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: innerW, text: combinedText, language: 'ar', direction: 'rtl', fontSize: fitFont, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'right', opacity: 1, rotation: 0, wrap: 'word', lineHeight: fitLH, styledRanges, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any) : null;
+    const combinedEl = combinedText ? ({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: innerW, text: combinedText, language: 'ar', direction: 'rtl', fontSize: fitFont, fontFamily: 'Arabic Typesetting', color: '#000', draggable: true, textAlign: 'right', opacity: 1, rotation: 0, wrap: 'word', lineHeight: fitLH, styledRanges, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any) : null;
 
     setPages(prev => {
       let next = [...prev] as PermisPages;
@@ -1024,7 +1032,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       yStart: 0,
       x: 0,
       width: contentWidth - padding * 2,
-      fontFamily: ARABIC_FONTS[0],
+      fontFamily: 'Arabic Typesetting',
       textAlign: 'right',
       direction: 'rtl',
       fontSize: isTXC ? 18 : 24,
@@ -1088,7 +1096,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
         const text = String(el.text || '');
         const boxW = Math.max(10, el.width || (contentWidth - padding *2));
         // Use a larger average character width for Arabic to reduce overestimation
-        const avgCharsPerLine = Math.max(1, Math.floor(boxW / (fontSize * 0.42)));
+        const avgCharsPerLine = Math.max(1, Math.floor(boxW / (fontSize * 0.15)));
         const parts = text.split(/\r?\n/);
         let totalLines = 0;
         parts.forEach(part => {
@@ -1887,28 +1895,27 @@ const detailsFontSize = 30;
         tableData: coords.map((c: any, idx: number) => ({ x: String(c.x ?? ''), y: String(c.y ?? ''), point: String(idx + 1) })),
       } as any;
       els.push(tableEl as any);
-      // Add bottom title inside double lines just below the table
+      // Add bottom title inside double lines just below the table (directly under table, match table width)
       try {
-        // Use a centered band that is 90% of the page width
-        const bandW = Math.floor(DEFAULT_CANVAS.width * 0.8);
-        const bandX = Math.floor((DEFAULT_CANVAS.width - bandW) / 2);
-        const baseY = (tableEl as any).y + (tableEl as any).height + 8;
+        // Match band width and position to the table, and tuck directly under it
+        const bandW = Math.floor((tableEl as any).width);
+        const bandX = Math.floor((tableEl as any).x);
+        const baseY = (tableEl as any).y + (tableEl as any).height + 2;
         const dblGap = 3;
         const titleFontSize = 32;
-        const titlePadding = 8;
+        const titlePadding = 2;
         const topY1 = baseY;
         const topY2 = topY1 + dblGap;
         const textY = topY2 + titlePadding;
         const bottomY1 = textY + titleFontSize + 6;
         const bottomY2 = bottomY1 + dblGap;
-        const bottomNotice = `سند منجمي مسجل في السجل المنجمي تحت رقم : ${LRM}${code} ${LRM}${typeCode}`;
         // Double top lines
         els.push({ id: uuidv4(), type: 'line', x: bandX, y: topY1, width: bandW, height: 0, stroke: '#000', strokeWidth: 1.2, draggable: true } as any);
         els.push({ id: uuidv4(), type: 'line', x: bandX, y: topY2, width: bandW, height: 0, stroke: '#000', strokeWidth: 1.2, draggable: true } as any);
         // Title text centered between doubles
         const noticeText = `سند منجمي مسجل في السجل المنجمي تحت رقم : ${LRM}${code} ${LRM}${typeCode}`;
-        const noticeFontSize = 35;
-    els.push({ id: uuidv4(), type: 'text', x: bandX, y: textY, width: bandW, text: noticeText, language: 'ar', direction: 'rtl', fontSize: noticeFontSize, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
+        const noticeFontSize = titleFontSize;
+        els.push({ id: uuidv4(), type: 'text', x: bandX, y: textY, width: bandW, text: noticeText, language: 'ar', direction: 'rtl', fontSize: noticeFontSize, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
         
         // Dynamic diagonal line starting from the left edge of the page band under the sentence to the bottom-left corner
         try {
