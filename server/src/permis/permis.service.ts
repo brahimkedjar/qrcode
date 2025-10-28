@@ -1,4 +1,4 @@
-﻿import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -52,6 +52,8 @@ const DEFAULT_COLUMNS = {
 
 @Injectable()
 export class PermisService {
+  private readonly logger = new Logger(PermisService.name);
+
   constructor(private readonly access: AccessService) {}
 
   async getPermisById(id: string) {
@@ -85,7 +87,7 @@ export class PermisService {
       const d2 = new Date(s);
       return isNaN(+d2) ? null : d2;
     };
-    const fmtFr = (d: Date | null) => d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '';
+    const fmtFr = (d: Date | null) => d ? `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` : '';
     const diffYears = (a: Date, b: Date) => {
       let years = b.getFullYear() - a.getFullYear();
       const m = b.getMonth() - a.getMonth();
@@ -99,16 +101,16 @@ export class PermisService {
     if (dDebut && dFin && dFin.getFullYear() > 1900) {
       const y = diffYears(dDebut, dFin);
       const y2 = String(y).padStart(2, '0');
-      const words: Record<number, string> = { 1: '���', 2: '�����', 3: '����', 4: '����', 5: '���', 6: '��', 7: '���', 8: '����', 9: '���', 10: '���' };
-      const word = words[y] ? (y <= 2 ? words[y] : `${words[y]} (${y2}) �����`) : `(${y2}) �����`;
-      // Compose full text with tatweel in ���/��� as per example
-      // Example: (�������: ����� (04) ����� (���� 18/12/2025 ����� 18/12/2029))
+      const words: Record<number, string> = { 1: 'Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½', 2: 'Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½', 3: 'Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½', 4: 'Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½', 5: 'Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½', 6: 'Ã¯Â¿Â½Ã¯Â¿Â½', 7: 'Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½', 8: 'Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½', 9: 'Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½', 10: 'Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½' };
+      const word = words[y] ? (y <= 2 ? words[y] : `${words[y]} (${y2}) Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½`) : `(${y2}) Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½`;
+      // Compose full text with tatweel in Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½/Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ as per example
+      // Example: (Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½: Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ (04) Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ (Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ 18/12/2025 Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ 18/12/2029))
       if (y <= 2) {
         // normalize singular/dual
-        const noun = y === 1 ? '���' : '�����';
-        dureeDisplayAr = `${word} (���� ${fmtFr(dDebut)} ����� ${fmtFr(dFin)})`;
+        const noun = y === 1 ? 'Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½' : 'Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½';
+        dureeDisplayAr = `${word} (Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ ${fmtFr(dDebut)} Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ ${fmtFr(dFin)})`;
       } else {
-        dureeDisplayAr = `${word} (���� ${fmtFr(dDebut)} ����� ${fmtFr(dFin)})`;
+        dureeDisplayAr = `${word} (Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ ${fmtFr(dDebut)} Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½ ${fmtFr(dFin)})`;
       }
     }
 
@@ -155,7 +157,7 @@ export class PermisService {
       (r as any).Wilaya ?? (r as any).wilaya ?? (r as any).idWilaya ?? ''
     );
     const communeVal = toStr((r as any).Commune ?? (r as any).commune ?? (r as any).idCommune ?? '');
-    const dairaVal = toStr((r as any).Daira ?? (r as any)['Daïra'] ?? (r as any).daira ?? '');
+    const dairaVal = toStr((r as any).Daira ?? (r as any)['DaÃƒÂ¯ra'] ?? (r as any).daira ?? '');
     const lieuditVal = toStr((r as any).LieuDit ?? (r as any).lieudit ?? '');
 
     const val: any = {
@@ -388,16 +390,24 @@ export class PermisService {
     const horodatage_hash = date_heure_systeme.replace(/[-:TZ.]/g, '');
     const date_demande = String(dateDemandeRaw || '').replace(/[^0-9]/g, '');
     const combined = `${codePermis}${typeCode}${date_demande}${codeWilaya}${nomSociete}${horodatage_hash}`;
-    try {
-      // Log the exact combined string used to generate the QR code hash
-      // (codePermis + typeCode + date_demande + codeWilaya + nomSociete + horodatage_hash)
-      // eslint-disable-next-line no-console
-      console.log('[QR GENERATE] raw combined string:', combined);
-    } catch {}
+    const components = { codePermis, typeCode, date_demande, codeWilaya, nomSociete, horodatage_hash };
+    this.logger.log(`[QR GENERATE] components => ${JSON.stringify(components)}`);
+    this.logger.log(`[QR GENERATE] raw combined string => ${combined}`);
     const hash = crypto.createHash('sha256').update(combined).digest('hex').toUpperCase();
     const base = hash.substring(0, 20);
     const code_unique = (base.match(/.{1,5}/g) || [base]).join('-');
-    return { code_unique, date_heure_systeme };
+    this.logger.log(`[QR GENERATE] hash result => ${JSON.stringify({ hash, code_unique, date_heure_systeme })}`);
+    return {
+      code_unique,
+      date_heure_systeme,
+      debug: {
+        ...components,
+        combined,
+        hash,
+        code_unique,
+        date_heure_systeme
+      }
+    };
   }
 
   async generateAndSaveQrCode(id: string, insertedBy?: string) {
@@ -419,31 +429,34 @@ export class PermisService {
     const codePermis = String(r[c.codeDemande] || '').padStart(5, '0');
     const typeCode = String((type as any)?.code || (type as any)?.Code || '').trim();
     const nomSociete = String((det as any)?.Nom || (det as any)?.nom || '').trim();
-    const { code_unique, date_heure_systeme } = this.generateUniqueQr(codePermis, typeCode, r[c.dateCreation], codeWilaya, nomSociete);
+    const requestSnapshot = {
+      id: String(id),
+      codePermis,
+      typeCode,
+      typeName: (type as any)?.nom || (type as any)?.Nom || undefined,
+      detenteurName: (det as any)?.Nom || (det as any)?.nom || undefined,
+      wilayaId,
+      codeWilaya,
+      localisation: (r as any)[c.localisation],
+      superficie: (r as any)[c.superficie],
+      dateCreation: (r as any)[c.dateCreation],
+      insertedBy: insertedBy || ''
+    };
+    this.logger.log(`[QR GENERATE] request payload => ${JSON.stringify(requestSnapshot)}`);
 
-    // Log all relevant attributes to the backend console for traceability
-    try {
-      const combinedData = {
-        id: String(id),
-        codePermis,
-        typeCode,
-        typeName: (type as any)?.nom || (type as any)?.Nom || undefined,
-        detenteurName: (det as any)?.Nom || (det as any)?.nom || undefined,
-        wilayaId,
-        codeWilaya,
-        localisation: (r as any)[c.localisation],
-        superficie: (r as any)[c.superficie],
-        dateCreation: (r as any)[c.dateCreation],
-        dateHeureSysteme: date_heure_systeme,
-        insertedBy: insertedBy || '',
-        qrCode: code_unique,
-      };
-      // eslint-disable-next-line no-console
-      console.log('[QR GENERATE] combined data =>', combinedData);
-    } catch {}
+    const { code_unique, date_heure_systeme, debug } = this.generateUniqueQr(codePermis, typeCode, r[c.dateCreation], codeWilaya, nomSociete);
+
+    const combinedData = {
+      ...requestSnapshot,
+      dateHeureSysteme: date_heure_systeme,
+      qrCode: code_unique,
+    };
+    this.logger.log(`[QR GENERATE] combined data => ${JSON.stringify(combinedData)}`);
+
     const up = `UPDATE ${t} SET DateHeureSysteme = ${this.access.escapeValue(date_heure_systeme)}, QrCode = ${this.access.escapeValue(code_unique)}, code_wilaya = ${this.access.escapeValue(codeWilaya)}, Qrinsererpar = ${this.access.escapeValue(String(insertedBy || ''))} WHERE ${c.id} = ${isNumericId ? id : this.access.escapeValue(String(id))}`;
     await this.access.query(up).catch(() => {});
-    return { ok: true, QrCode: code_unique, DateHeureSysteme: date_heure_systeme, code_wilaya: codeWilaya, insertedBy: insertedBy || '' };
+    this.logger.log(`[QR GENERATE] persisted => ${JSON.stringify({ id: String(id), code_unique, date_heure_systeme, codeWilaya, insertedBy: insertedBy || '' })}`);
+    return { ok: true, QrCode: code_unique, DateHeureSysteme: date_heure_systeme, code_wilaya: codeWilaya, insertedBy: insertedBy || '', request: combinedData, debug };
   }
 
   async verifyByQrCode(code: string) {

@@ -21,6 +21,13 @@ export const TextElement: React.FC<TextElementProps> = ({
 }) => {
   const textNodeRef = useRef<any>(null);
   const [textBounds, setTextBounds] = useState({ width: element.width || 240, height: element.height || 40 });
+  const direction = (element.direction || 'ltr') as 'rtl' | 'ltr';
+  const digitSequenceRegex = /[\u0030-\u0039\u0660-\u0669\u06F0-\u06F9]+(?:[\u200F\u200E\s]*[\/\-\u2212][\u200F\u200E\s]*[\u0030-\u0039\u0660-\u0669\u06F0-\u06F9]+)*/g;
+  const formatDisplayText = (value: string) => {
+    if (!value) return '';
+    if (direction !== 'rtl') return value;
+    return value.replace(digitSequenceRegex, (match) => `\u202D${match.replace(/-/g, '\u2212')}\u202C`);
+  };
 
   const safeFontFamily = (fam?: string) => {
     if (!fam) return fam as any;
@@ -81,10 +88,12 @@ export const TextElement: React.FC<TextElementProps> = ({
     const baseFont = element.fontSize || 20;
     const baseFamily = element.fontFamily;
     const baseColor = element.color || '#000';
-    const dir = (element.direction || 'ltr') as 'rtl' | 'ltr';
+    const dir = direction;
     const align = (element.textAlign || (dir === 'rtl' ? 'right' : 'left')) as 'left' | 'center' | 'right';
     const widthLimit = Math.max(10, element.width || 0);
     const lineHMultiplier = element.lineHeight || 1.2;
+    const widthFor = (value: string, size: number, weight: 'bold' | 'normal') =>
+      measureWidth(formatDisplayText(value), size, baseFamily, weight);
 
     type Run = { start: number; end: number; fontSize: number; fontWeight: 'bold'|'normal'; color?: string; underline?: boolean };
     let runs: Run[] = [{ start: 0, end: text.length, fontSize: baseFont, fontWeight: 'normal', color: baseColor, underline: false }];
@@ -111,6 +120,40 @@ export const TextElement: React.FC<TextElementProps> = ({
       }
       runs = ns;
     }
+    const splitRuns: Run[] = [];
+    for (const run of runs) {
+      const slice = text.slice(run.start, run.end);
+      if (!slice) continue;
+      digitSequenceRegex.lastIndex = 0;
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = digitSequenceRegex.exec(slice))) {
+        const matchText = match[0];
+        const matchStart = match.index;
+        if (matchStart > lastIndex) {
+          splitRuns.push({
+            ...run,
+            start: run.start + lastIndex,
+            end: run.start + matchStart,
+          });
+        }
+        splitRuns.push({
+          ...run,
+          start: run.start + matchStart,
+          end: run.start + matchStart + matchText.length,
+          fontSize: Math.max(run.fontSize, 20),
+        });
+        lastIndex = matchStart + matchText.length;
+      }
+      if (lastIndex < slice.length) {
+        splitRuns.push({
+          ...run,
+          start: run.start + lastIndex,
+          end: run.end,
+        });
+      }
+    }
+    runs = splitRuns.length > 0 ? splitRuns : runs;
 
     // Tokenize runs into space/newline-aware tokens
     type Token = { text: string; width: number; fontSize: number; fontWeight: 'bold'|'normal'; color?: string; underline?: boolean };
@@ -121,7 +164,7 @@ export const TextElement: React.FC<TextElementProps> = ({
       let buf = '';
       const flushBuf = () => {
         if (!buf) return;
-        tokens.push({ text: buf, width: measureWidth(buf, run.fontSize, baseFamily, run.fontWeight), fontSize: run.fontSize, fontWeight: run.fontWeight, color: run.color, underline: run.underline });
+        tokens.push({ text: buf, width: widthFor(buf, run.fontSize, run.fontWeight), fontSize: run.fontSize, fontWeight: run.fontWeight, color: run.color, underline: run.underline });
         buf = '';
       };
       for (let i = 0; i < slice.length; i++) {
@@ -131,7 +174,7 @@ export const TextElement: React.FC<TextElementProps> = ({
           tokens.push({ text: '\n', width: 0, fontSize: run.fontSize, fontWeight: run.fontWeight, color: run.color, underline: run.underline });
         } else if (/\s/.test(ch)) {
           flushBuf();
-          const spaceW = measureWidth(ch, run.fontSize, baseFamily, run.fontWeight);
+          const spaceW = widthFor(ch, run.fontSize, run.fontWeight);
           tokens.push({ text: ch, width: spaceW, fontSize: run.fontSize, fontWeight: run.fontWeight, color: run.color, underline: run.underline });
         } else {
           buf += ch;
@@ -149,7 +192,7 @@ export const TextElement: React.FC<TextElementProps> = ({
     let curMaxAscent = measureMetrics(baseFont, baseFamily, 'normal').ascent;
     let curMaxDescent = measureMetrics(baseFont, baseFamily, 'normal').descent;
     const pushLine = () => {
-      const lineWidth = curSegs.reduce((a,b) => a + measureWidth(b.text, b.fontSize, baseFamily, b.fontWeight), 0);
+      const lineWidth = curSegs.reduce((a,b) => a + widthFor(b.text, b.fontSize, b.fontWeight), 0);
       const baseHeight = curMaxAscent + curMaxDescent;
       const lineHeight = Math.ceil(baseHeight * lineHMultiplier);
       lines.push({ width: lineWidth, height: lineHeight, ascent: curMaxAscent, descent: curMaxDescent, segments: curSegs });
@@ -174,7 +217,7 @@ export const TextElement: React.FC<TextElementProps> = ({
         let piece = '';
         let pieceW = 0;
         for (const ch of tk.text) {
-          const w = measureWidth(ch, tk.fontSize, baseFamily, tk.fontWeight);
+          const w = widthFor(ch, tk.fontSize, tk.fontWeight);
           if (pieceW + w > limit && piece) {
             const mm = measureMetrics(tk.fontSize, baseFamily, tk.fontWeight);
             curSegs.push({ x: 0, y: 0, text: piece, fontSize: tk.fontSize, fontWeight: tk.fontWeight, color: tk.color, ascent: mm.ascent, descent: mm.descent, underline: tk.underline });
@@ -221,7 +264,7 @@ export const TextElement: React.FC<TextElementProps> = ({
       if (dir === 'rtl') {
         // place segments from right to left
         for (const seg of line.segments) {
-          const segW = measureWidth(seg.text, seg.fontSize, baseFamily, seg.fontWeight);
+          const segW = widthFor(seg.text, seg.fontSize, seg.fontWeight);
           const x = startX + (lineWidth - (acc + segW));
           // baseline align: y offset so baselines match
           const ySeg = y + (line.ascent - seg.ascent);
@@ -230,7 +273,7 @@ export const TextElement: React.FC<TextElementProps> = ({
         }
       } else {
         for (const seg of line.segments) {
-          const segW = measureWidth(seg.text, seg.fontSize, baseFamily, seg.fontWeight);
+          const segW = widthFor(seg.text, seg.fontSize, seg.fontWeight);
           const x = startX + acc;
           const ySeg = y + (line.ascent - seg.ascent);
           placed.push({ ...seg, x, y: ySeg });
@@ -302,7 +345,7 @@ export const TextElement: React.FC<TextElementProps> = ({
           ref={textNodeRef}
           x={0}
           y={0}
-          text={element.text}
+          text={formatDisplayText(element.text || '')}
           fontSize={element.fontSize}
           fontFamily={safeFontFamily(element.fontFamily) as any}
           fontStyle={element.fontWeight === 'bold' ? 'bold' : 'normal'}
@@ -311,7 +354,7 @@ export const TextElement: React.FC<TextElementProps> = ({
           lineHeight={element.lineHeight}
           wrap={element.wrap}
           onDblClick={onDblClickText}
-          direction={element.direction || 'ltr'}
+          direction={direction}
           listening={true}
           perfectDrawEnabled={false}
           width={element.width}
@@ -323,7 +366,7 @@ export const TextElement: React.FC<TextElementProps> = ({
             key={`${element.id}-seg-${i}`}
             x={seg.x}
             y={seg.y}
-            text={seg.text}
+            text={formatDisplayText(seg.text)}
             fontSize={seg.fontSize}
             fontFamily={safeFontFamily(element.fontFamily) as any}
             fontStyle={seg.fontWeight === 'bold' ? 'bold' : 'normal'}
@@ -332,7 +375,7 @@ export const TextElement: React.FC<TextElementProps> = ({
             align={'left'}
             lineHeight={element.lineHeight || 1.2}
             wrap={'none'}
-            direction={element.direction || 'ltr'}
+            direction={direction}
             listening={false}
           />
         ))

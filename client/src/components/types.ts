@@ -79,6 +79,11 @@ export interface PermisElement {
   outerBorderWidth?: number;
   headerTextAlign?: 'left' | 'center' | 'right';
   cellPadding?: number;
+  canvasWidth?: number;
+  pageLeftMargin?: number;
+  pageRightMargin?: number;
+  pageTopMargin?: number;
+  pageBottomMargin?: number;
   // data matrix: each item is a row object for the logical dataset (mapped across blocks)
   tableData?: Array<Record<string, string | number>>;
   tableColumns?: Array<{ key: string; title: string; width?: number; align?: 'left' | 'center' | 'right' }>;

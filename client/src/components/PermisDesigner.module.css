@@ -120,6 +120,15 @@
 }
 .zoomDisplay { width:48px; text-align:center; font-weight:600; }
 
+.historyGroup {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:6px;
+  background: var(--glass-2);
+  border-radius:8px;
+}
+
 .templateSelect {
   height:36px;
   border-radius:8px;
@@ -216,6 +225,11 @@
   background: #ffffff;
   border: 1px solid rgba(10,110,150,0.25);
   box-shadow: 0 6px 20px rgba(2,6,23,0.10);
+  cursor: grab;
+  user-select: none;
+}
+.textOverlayToolbar:active {
+  cursor: grabbing;
 }
 .textOverlayToolbar button {
   height: 30px;
@@ -233,6 +247,19 @@
   background: #0b6b95;
   color: #fff;
   border-color: #0b6b95;
+}
+.sizeBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0b6b95;
+  border-radius: 6px;
+  background: #f1f9ff;
+  border: 1px solid rgba(10,110,150,0.18);
 }
 
 /* Properties panel */
@@ -492,4 +519,18 @@
 .ltrText {
   direction: ltr;
   text-align: left;
+}
+
+.qrDebugBlock {
+  background: #f5f7fa;
+  border: 1px solid rgba(10,20,30,0.08);
+  border-radius: 6px;
+  padding: 8px;
+  font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }

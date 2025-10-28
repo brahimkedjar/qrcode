@@ -4,6 +4,7 @@
 import React, { useMemo, useRef } from 'react';
 import { Group, Rect, Line, Text } from 'react-konva';
 import type { PermisElement } from './types';
+import { deriveTableLayout } from './tableLayout';
 
 interface TableElementProps {
   element: PermisElement;
@@ -25,81 +26,7 @@ export const TableElement: React.FC<TableElementProps> = ({
   onCellDblClick,
 }) => {
   const groupRef = useRef<any>(null);
-
-  const cfg = useMemo(() => {
-    const blockCols = Math.max(1, Math.min(5, Number(element.blockCols || 1)));
-    const rowHeight = Math.max(14, Number(element.rowHeight || 34));
-    const baseColWidths = (element.colWidths && element.colWidths.length > 0) ? element.colWidths : [60, 90, 90];
-    const headerText = element.headerText || '';
-    const headerHeight = Math.max(0, Number(element.headerHeight || 28));
-    const headerFill = element.headerFill || '#f5f5f5';
-    const altRowFill = element.altRowFill || '#f8f8f8';
-    const stroke = element.stroke || '#000';
-    const strokeWidth = Number(element.strokeWidth || 1.2);
-    const fontFamily = element.tableFontFamily || element.fontFamily || 'Arial';
-    const fontSize = Number((element as any).tableFontSize ?? (element as any).fontSize ?? 17);
-    const textAlign = (element as any).tableTextAlign || 'center';
-    const data = Array.isArray(element.tableData) ? element.tableData : [];
-    // Fit rows exactly to the dataset (no extra empty rows)
-    const rowsPerCol = Math.max(1, Math.ceil((data.length || 1) / blockCols));
-    const columns = (element.tableColumns && element.tableColumns.length > 0)
-      ? element.tableColumns
-      : [
-        {  key: 'x', title: 'ع', width: baseColWidths[0], align: 'right' },
-        {  key: 'y', title: 'س', width: baseColWidths[1], align: 'right'  },
-        { key: 'point', title: 'النقطة', width: baseColWidths[2], align: 'right' },
-      ];
-   
-    const blockBaseW = (columns.map(c => c.width || 0).reduce((a, b) => a + b, 0)) || (baseColWidths.reduce((a, b) => a + b, 0));
-    // For small coordinate lists, widen tables visually without adding empty rows
-    const minBlocksForWidth = (Array.isArray(data) && data.length < 10) ? 2 : 1;
-    const desiredWidth = Math.max(120, Number(element.width || blockBaseW * Math.max(blockCols, minBlocksForWidth)));
-    const desiredHeight = Math.max(60, Number(element.height || (headerHeight + rowHeight * (rowsPerCol + 1))));
-    // scale columns to fit desired width equally per block
-    const perBlockWidth = desiredWidth / blockCols;
-    const scale = blockBaseW > 0 ? perBlockWidth / blockBaseW : 1;
-    const scaledCols = columns.map(c => ({
-      ...c,
-      width: Math.max(10, Math.round((c.width || 0) * scale)),
-      align: (c as any).align ?? textAlign,
-    }));
-    const blockW = scaledCols.reduce((a, b) => a + (b.width || 0), 0);
-
-    return {
-      blockCols,
-      rowsPerCol,
-      rowHeight,
-      headerText,
-      headerHeight,
-      headerFill,
-      altRowFill,
-      stroke,
-      strokeWidth,
-      headerTextAlign: (element as any).headerTextAlign || 'center',
-      showCellBorders: (element as any).showCellBorders !== false,
-      gridColor: (element as any).tableGridColor || '#4F4040',
-      gridWidth: typeof (element as any).tableGridWidth === 'number' ? (element as any).tableGridWidth : 1,
-      outerBorderColor: (element as any).outerBorderColor || stroke,
-      outerBorderWidth: typeof (element as any).outerBorderWidth === 'number' ? (element as any).outerBorderWidth : strokeWidth,
-      cellPadding: typeof (element as any).cellPadding === 'number' ? (element as any).cellPadding : 8,
-      fontFamily,
-      fontSize,
-      textAlign,
-      data,
-      columns: scaledCols,
-      width: desiredWidth,
-      height: desiredHeight,
-      blockW,
-      showHeader: (element as any).showHeader !== false,
-    } as const;
-  }, [element]);
-
-  const safeFontFamily = (fam?: string) => {
-    if (!fam) return fam as any;
-    const trimmed = String(fam).trim();
-    if (/^['"].*['"]$/.test(trimmed)) return trimmed; // already quoted
-    return /\s/.test(trimmed) ? `"${trimmed}"` : trimmed;
-  };
+  const cfg = useMemo(() => deriveTableLayout(element), [element]);
 
   const common = {
     id: element.id,
@@ -202,7 +129,7 @@ export const TableElement: React.FC<TableElementProps> = ({
       );
       const idx = startIndex + r;
       if (idx < cfg.data.length) {
-        const row = cfg.data[idx] || {} as any;
+        const row = (cfg.data[idx] || {}) as any;
         let cx2 = bx;
         cfg.columns.forEach((col, cIdx) => {
           // Draw a thin cell border around each cell to clearly separate
@@ -265,3 +192,4 @@ export const TableElement: React.FC<TableElementProps> = ({
 };
 
 export default TableElement;
+

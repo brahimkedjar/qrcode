@@ -5,7 +5,7 @@ import {
   FiDownload, FiSave, FiEdit2, FiMove, FiType,
   FiTrash2, FiCopy, FiLayers, FiChevronLeft, FiChevronRight, FiGrid,
   FiChevronUp, FiChevronDown, FiRefreshCw, FiCheckCircle, FiAlertCircle,
-  FiUpload
+  FiUpload, FiRotateCcw, FiRotateCw
 } from 'react-icons/fi';
 import { BsTextParagraph, BsImage, BsBorderWidth } from 'react-icons/bs';
 import axios from 'axios';
@@ -18,8 +18,9 @@ import type { PermisElement, PermisDesignerProps, TextEditOverlay, ArticleItem }
 import { ArticlesPanel } from './ArticlesPanel';
 import { toArticleElements } from './articleLoader';
 import { listArticleSets, getArticlesForSet, saveArticleSet, exportArticleSet, importArticleSet, inferDefaultArticleSetKey, type ArticleSetMeta } from './articleSets';
-import { FONT_FAMILIES, ARABIC_FONTS, DEFAULT_CANVAS } from './constants';
+import { FONT_FAMILIES, ARABIC_FONTS, DEFAULT_CANVAS, PAGE_MARGINS } from './constants';
 import { gridBackground, clamp } from './layout';
+import { deriveTableLayout } from './tableLayout';
 import { AiOutlineQrcode } from "react-icons/ai";
 import styles from './PermisDesigner.module.css';
 import jsPDF from 'jspdf';
@@ -104,6 +105,7 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
     return isNaN(n) ? 10 : Math.max(4, Math.min(30, n));
   });
   const [dragNormalized, setDragNormalized] = useState(false);
+  const [lastQrDebug, setLastQrDebug] = useState<{ request?: any; debug?: any } | null>(null);
   // Marquee selection state
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -116,6 +118,11 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
   const [cellEditValue, setCellEditValue] = useState<string>('');
 
   const currentCanvasSize = canvasSizes[currentPage] || canvasSizes[0] || { width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height };
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textToolbarRef = useRef<HTMLDivElement | null>(null);
+  const overlayDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
+  const initialPagesRef = useRef<PermisPages | null>(null);
+  const initialDataRef = useRef<any>(null);
   // Ensure color inputs always receive #rrggbb to avoid browser warnings
   const normalizeHexColor = (val: any, fallback = '#000000') => {
     try {
@@ -130,6 +137,30 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
   useEffect(() => {
     try { localStorage.setItem('rowsPerColSetting', String(rowsPerColSetting)); } catch {}
   }, [rowsPerColSetting]);
+
+  useEffect(() => {
+    if (!initialData) return;
+    if (!savedPermisId) {
+      const rawId = initialData.id_demande ?? initialData.id ?? initialData.code_demande ?? initialData.codeDemande;
+      const numericId = rawId != null ? Number(rawId) : NaN;
+      if (Number.isFinite(numericId)) {
+        setSavedPermisId(numericId);
+      }
+    }
+    if (!permisCode) {
+      const codeVal = initialData.code_demande ?? initialData.codeDemande ?? null;
+      if (codeVal) setPermisCode(String(codeVal));
+    }
+  }, [initialData, savedPermisId, permisCode]);
+
+  useEffect(() => {
+    const hasContent = pages.some(page => Array.isArray(page) && page.length > 0);
+    if (!hasContent) return;
+    if (!initialPagesRef.current || initialDataRef.current !== initialData) {
+      initialPagesRef.current = JSON.parse(JSON.stringify(pages));
+      initialDataRef.current = initialData;
+    }
+  }, [pages, initialData]);
 
   const handleRefreshTemplates = useCallback(async () => {
     if (!savedPermisId) {
@@ -155,8 +186,6 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
       setLoadingTemplates(false);
     }
   }, [savedPermisId, apiURL]);
-
-  // Removed duplicate initialization effect to avoid pages reset during edits
 
   function createPermisDetailsPage(data: any): PermisElement[] {
     const borderElements = createPageBorder(DEFAULT_CANVAS.width, DEFAULT_CANVAS.height);
@@ -264,6 +293,110 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
     });
   }, []);
 
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex >= 0 && historyIndex < history.length - 1;
+
+  const undo = useCallback(() => {
+    if (!canUndo) return;
+    const target = history[historyIndex - 1];
+    if (!target) return;
+    const snapshot = JSON.parse(JSON.stringify(target)) as PermisPages;
+    setPages(snapshot);
+    setHistoryIndex(historyIndex - 1);
+    setSelectedIds([]);
+    setTextOverlay(null);
+  }, [canUndo, history, historyIndex]);
+
+  const redo = useCallback(() => {
+    if (!canRedo) return;
+    const target = history[historyIndex + 1];
+    if (!target) return;
+    const snapshot = JSON.parse(JSON.stringify(target)) as PermisPages;
+    setPages(snapshot);
+    setHistoryIndex(historyIndex + 1);
+    setSelectedIds([]);
+    setTextOverlay(null);
+  }, [canRedo, history, historyIndex]);
+
+  const handleResetLayout = useCallback(() => {
+    const baseSnapshot = initialPagesRef.current;
+    if (!baseSnapshot) {
+      toast.error('Default layout not available yet');
+      return;
+    }
+    const layoutKeys: (keyof PermisElement)[] = [
+      'x',
+      'y',
+      'width',
+      'height',
+      'rotation',
+      'scaleX',
+      'scaleY',
+      'points',
+      'canvasWidth',
+      'pageLeftMargin',
+      'pageRightMargin',
+      'pageTopMargin',
+      'pageBottomMargin',
+      'colWidths',
+      'rowHeight',
+      'rowsPerCol',
+      'blockCols'
+    ];
+    let nextSnapshot: PermisPages | null = null;
+    setPages(prev => {
+      const maxPages = Math.max(prev.length, baseSnapshot.length);
+      const merged: PermisPages = [];
+      for (let pageIndex = 0; pageIndex < maxPages; pageIndex++) {
+        const currentPage = [...(prev[pageIndex] || [])];
+        const snapshotPage = baseSnapshot[pageIndex] ? baseSnapshot[pageIndex].map(el => ({ ...el })) : [];
+        const snapMap = new Map(snapshotPage.map(el => [el.id, el]));
+        const used = new Set<string>();
+        const updated = currentPage.map(el => {
+          const snap = snapMap.get(el.id);
+          if (!snap) return el;
+          used.add(el.id);
+          if (snap.meta?.isBorder) {
+            return { ...snap };
+          }
+          const nextEl: PermisElement = { ...el };
+          layoutKeys.forEach(key => {
+            if (key in snap) {
+              const snapValue = (snap as any)[key];
+              if (Array.isArray(snapValue)) {
+                (nextEl as any)[key] = snapValue.map(item =>
+                  item && typeof item === 'object' ? { ...item } : item
+                );
+              } else if (snapValue && typeof snapValue === 'object') {
+                (nextEl as any)[key] = { ...snapValue };
+              } else {
+                (nextEl as any)[key] = snapValue;
+              }
+            }
+          });
+          if (snap.meta) {
+            nextEl.meta = { ...(nextEl.meta || {}), ...snap.meta };
+          }
+          return nextEl;
+        });
+        snapshotPage.forEach(snapEl => {
+          if (!used.has(snapEl.id)) {
+            updated.push({ ...snapEl });
+          }
+        });
+        merged[pageIndex] = updated;
+      }
+      nextSnapshot = merged;
+      return merged;
+    });
+    if (nextSnapshot) {
+      pushHistory(JSON.parse(JSON.stringify(nextSnapshot)) as PermisPages);
+    }
+    setSelectedIds([]);
+    setTextOverlay(null);
+    toast.success('Layout positions restored');
+  }, [pushHistory]);
+
   const handleResizeCanvas = useCallback((direction: 'width' | 'height', amount: number) => {
     setCanvasSizes(prev => {
       const newSizes = [...prev];
@@ -310,7 +443,7 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
 
   // Fixed createPageBorder function
 function createPageBorder(width: number, height: number): PermisElement[] {
-  const borderColor = '#1a5276';
+  const borderColor = '#8a51a7';
   const borderWidth = 2;
   const dashPattern = [0.8, 0.4];
   const borders = [
@@ -565,7 +698,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
     // Prepare dynamic substitutions (hoisted before intro processing)
     const beneficiaryText = [statutJuridique, holderDisplay].filter(Boolean).join(' ');
     const expDate = String((initialData as any)?.date_expiration_fr || '').trim();
-    const fmtFr = (d: Date | null) => (d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '');
+    const fmtFr = (d: Date | null) => (d ? `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` : '');
     const parseDate = (v: any): Date | null => {
       if (!v && v !== 0) return null;
       if (v instanceof Date) return isNaN(+v) ? null : v;
@@ -1215,33 +1348,11 @@ function createCornerDecorations(color: string, width: number, height: number): 
   }, [selectedIds, currentPage, pages]);
 
   useHotkeys('delete', () => handleDeleteSelected(), [pages, currentPage, selectedIds]);
-  useHotkeys('ctrl+z, cmd+z', () => undo(), [history, historyIndex]);
-  useHotkeys('ctrl+y, cmd+y', () => redo(), [history, historyIndex]);
+  useHotkeys('ctrl+z, cmd+z', (event) => { event.preventDefault(); undo(); }, [undo]);
+  useHotkeys('ctrl+y, cmd+y, ctrl+shift+z, cmd+shift+z', (event) => { event.preventDefault(); redo(); }, [redo]);
   useHotkeys('ctrl+c, cmd+c', () => handleCopySelected(), [pages, currentPage, selectedIds]);
   useHotkeys('ctrl+v, cmd+v', () => handlePasteSelected(), [pages, currentPage]);
   useHotkeys('esc', () => setTextOverlay(null), []);
-
-  const undo = useCallback(() => {
-    setHistoryIndex(idx => {
-      if (idx > 0) {
-        setPages(history[idx - 1]);
-        setSelectedIds([]);
-        return idx - 1;
-      }
-      return idx;
-    });
-  }, [history]);
-
-  const redo = useCallback(() => {
-    setHistoryIndex(idx => {
-      if (idx < history.length - 1) {
-        setPages(history[idx + 1]);
-        setSelectedIds([]);
-        return idx + 1;
-      }
-      return idx;
-    });
-  }, [history]);
 
   const generateQRCodeData = (data: any, codeOverride?: string): string => {
     const baseUrl = 'https://pom.anam.gov.dz/';
@@ -1663,16 +1774,25 @@ const detailsFontSize = 30;
       const tableW = Math.min(tableWAvail, blockW * Math.max(blockCols, 2));
       const headerY = y + 40;
       const tableH = headerH + rowH * (rowsPerColExact + 1);
+      const marginLeft = PAGE_MARGINS.left ?? 0;
+      const marginRight = PAGE_MARGINS.right ?? 0;
+      const innerWidth = DEFAULT_CANVAS.width - marginLeft - marginRight;
+      const forcedTableWidth = Math.max(120, innerWidth * 0.97);
+      const initialX = marginLeft + Math.max(0, (innerWidth - forcedTableWidth) / 2);
       const tableEl: PermisElement = {
         id: uuidv4(),
         type: 'table',
-        x: (DEFAULT_CANVAS.width - tableW) / 2,
+        x: initialX,
         y: headerY,
-        width: tableW,
+        width: forcedTableWidth,
         height: tableH,
         draggable: true,
         stroke: '#000',
         strokeWidth: 1.2,
+        canvasWidth: DEFAULT_CANVAS.width,
+        pageLeftMargin: PAGE_MARGINS.left ?? 0,
+        pageRightMargin: PAGE_MARGINS.right ?? 0,
+        pageBottomMargin: PAGE_MARGINS.bottom ?? 0,
         headerText,
         headerHeight: headerH,
         headerFill: '#f5f5f5',
@@ -1799,10 +1919,10 @@ const detailsFontSize = 30;
       els.push({ id: uuidv4(), type: 'line', x: bx + colPtW, y: tableStartY, width: vHeight, height: 0, rotation: 90, stroke: '#4F4040', strokeWidth: 1, meta: { nonInteractive: true, isGrid: true } } as any);
       els.push({ id: uuidv4(), type: 'line', x: bx + colPtW + colXW, y: tableStartY, width: vHeight, height: 0, rotation: 90, stroke: '#4F4040', strokeWidth: 1, meta: { nonInteractive: true, isGrid: true } } as any);
       // Column headers
-      const headerOffset = Math.max((rowH - 14) / 2, 0);
-      els.push({ id: uuidv4(), type: 'text', x: bx, y: tableStartY + headerOffset, width: colPtW, text: 'ع', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
-      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW, y: tableStartY + headerOffset, width: colXW, text: 'س', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
-      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW, y: tableStartY + headerOffset, width: colYW, text: 'النقطة', fontSize: 14, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
+      const headerOffset = Math.max((rowH - 20) / 2, 0);
+      els.push({ id: uuidv4(), type: 'text', x: bx, y: tableStartY + headerOffset, width: colPtW, text: 'ع', fontSize: 20, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
+      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW, y: tableStartY + headerOffset, width: colXW, text: 'س', fontSize: 20, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
+      els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW, y: tableStartY + headerOffset, width: colYW, text: 'النقطة', fontSize: 20, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
 
       // Rows
       for (let r = 0; r < rowsPerCol; r++) {
@@ -1825,10 +1945,10 @@ const detailsFontSize = 30;
           const vX = String(item.x ?? '');
           const vY = String(item.y ?? '');
           // Left to right columns: ع (Y), س (X), النقطة (Point)
-          const cellOffset = Math.max((rowH - 14) / 2, 0);
-          els.push({ id: uuidv4(), type: 'text', x: bx, y: ry + cellOffset, width: colPtW, text: vY, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center' } as any);
-          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW, y: ry + cellOffset, width: colXW, text: vX, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center' } as any);
-          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW, y: ry + cellOffset, width: colYW, text: vPoint, fontSize: 14, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center' } as any);
+          const cellOffset = Math.max((rowH - 20) / 2, 0);
+          els.push({ id: uuidv4(), type: 'text', x: bx, y: ry + cellOffset, width: colPtW, text: vY, fontSize: 20, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center' } as any);
+          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW, y: ry + cellOffset, width: colXW, text: vX, fontSize: 20, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center' } as any);
+          els.push({ id: uuidv4(), type: 'text', x: bx + colPtW + colXW, y: ry + cellOffset, width: colYW, text: vPoint, fontSize: 20, fontFamily: 'Arial', color: '#000', draggable: true, textAlign: 'center' } as any);
         }
         // Horizontal subtle grid line
         els.push({ id: uuidv4(), type: 'line', x: bx, y: ry, width: blockW, height: 0, stroke: '#4F4040', strokeWidth: 1, meta: { nonInteractive: true, isGrid: true } } as any);
@@ -1923,6 +2043,37 @@ const detailsFontSize = 30;
   }
 
   const elements = pages[currentPage];
+  const selectionFontSizeInfo = useMemo(() => {
+    if (!textOverlay) return null;
+    const { id, selectionStart = 0, selectionEnd = selectionStart } = textOverlay;
+    if (!id || id.startsWith('table:')) return null;
+    const target = elements.find(el => el.id === id && el.type === 'text') as PermisElement | undefined;
+    if (!target) return null;
+    const baseFont = target.fontSize || 20;
+    const text = String(target.text || '');
+    if (text.length === 0) {
+      return { fontSize: baseFont, mixed: false };
+    }
+    let start = Math.max(0, Math.min(selectionStart, selectionEnd));
+    let end = Math.max(selectionStart, selectionEnd);
+    if (start === end) {
+      if (start >= text.length) start = Math.max(0, text.length - 1);
+      end = Math.min(text.length, start + 1);
+    }
+    if (end <= start) end = Math.min(text.length, start + 1);
+    const ranges = Array.isArray((target as any).styledRanges) ? (target as any).styledRanges : [];
+    const sizes = new Set<number>();
+    for (let i = start; i < end; i++) {
+      const match = ranges.find((r: any) => r.start <= i && r.end > i);
+      const size = typeof match?.fontSize === 'number' ? match.fontSize : baseFont;
+      sizes.add(size);
+    }
+    if (sizes.size === 0) sizes.add(baseFont);
+    if (sizes.size === 1) {
+      return { fontSize: Array.from(sizes)[0], mixed: false };
+    }
+    return { fontSize: null, mixed: true };
+  }, [textOverlay, elements]);
   const setElementsForCurrent = useCallback((updater: (prev: PermisElement[]) => PermisElement[]) => {
     setPages(prev => {
       const next = [...prev] as PermisPages;
@@ -2059,6 +2210,50 @@ const detailsFontSize = 30;
     setElementsForCurrent(prev => prev.map(el => (el.id === id ? { ...el, x: nx, y: ny } : el)));
   }, [setElementsForCurrent]);
 
+  const computeTableTargetWidth = useCallback(() => {
+    const marginLeft = PAGE_MARGINS.left ?? 0;
+    const marginRight = PAGE_MARGINS.right ?? 0;
+    const baseWidth = currentCanvasSize.width || DEFAULT_CANVAS.width;
+    const available = Math.max(120, baseWidth - marginLeft - marginRight);
+    return Math.max(120, available * 0.97);
+  }, [currentCanvasSize.width]);
+
+  useEffect(() => {
+    const targetWidth = computeTableTargetWidth();
+    const marginLeft = PAGE_MARGINS.left ?? 0;
+    const marginRight = PAGE_MARGINS.right ?? 0;
+    const marginBottom = PAGE_MARGINS.bottom ?? 0;
+    setPages(prev => {
+      const next = [...prev] as PermisPages;
+      const page = next[currentPage];
+      if (!page) return prev;
+      let changed = false;
+      const updated = page.map(el => {
+        if (el.type !== 'table') return el;
+        const widthDiff = Math.abs((el.width || 0) - targetWidth);
+        const needsUpdate =
+          widthDiff > 0.5 ||
+          (el as any).canvasWidth !== currentCanvasSize.width ||
+          (el as any).pageLeftMargin !== marginLeft ||
+          (el as any).pageRightMargin !== marginRight ||
+          (el as any).pageBottomMargin !== marginBottom;
+        if (!needsUpdate) return el;
+        changed = true;
+        return {
+          ...el,
+          width: targetWidth,
+          canvasWidth: currentCanvasSize.width,
+          pageLeftMargin: marginLeft,
+          pageRightMargin: marginRight,
+          pageBottomMargin: marginBottom,
+        } as PermisElement;
+      });
+      if (!changed) return prev;
+      next[currentPage] = updated;
+      return next;
+    });
+  }, [computeTableTargetWidth, currentCanvasSize.width, currentPage, setPages]);
+
   const handleTransformEnd = useCallback(() => {
     const nodes = transformerRef.current?.nodes?.() || [];
     setElementsForCurrent(prev => {
@@ -2119,16 +2314,35 @@ const detailsFontSize = 30;
               newW = (node.width?.() || 0) * (node.scaleX?.() || 1) || newW;
               newH = (node.height?.() || 0) * (node.scaleY?.() || 1) || newH;
             }
-            updated[i] = {
-              ...updated[i],
-              x: node.x(),
-              y: node.y(),
-              width: newW || updated[i].width,
-              height: newH || updated[i].height,
+            if ((updated[i] as PermisElement).type === 'table') {
+              const targetWidth = computeTableTargetWidth();
+              const nextHeight = Math.max(60, newH || updated[i].height || 0);
+              updated[i] = {
+                ...updated[i],
+                x: node.x(),
+                y: node.y(),
+                width: targetWidth,
+                height: nextHeight,
+              canvasWidth: currentCanvasSize.width,
+              pageLeftMargin: PAGE_MARGINS.left ?? 0,
+              pageRightMargin: PAGE_MARGINS.right ?? 0,
+              pageBottomMargin: PAGE_MARGINS.bottom ?? 0,
               scaleX: 1,
               scaleY: 1,
               rotation: node.rotation(),
             } as PermisElement;
+            } else {
+              updated[i] = {
+                ...updated[i],
+                x: node.x(),
+                y: node.y(),
+                width: newW || updated[i].width,
+                height: newH || updated[i].height,
+                scaleX: 1,
+                scaleY: 1,
+                rotation: node.rotation(),
+              } as PermisElement;
+            }
           }
         }
         if (node.scaleX) node.scaleX(1);
@@ -2187,14 +2401,31 @@ const detailsFontSize = 30;
             newW = (node.width?.() || 0) * (node.scaleX?.() || 1) || newW;
             newH = (node.height?.() || 0) * (node.scaleY?.() || 1) || newH;
           }
-          arr[idx] = {
-            ...arr[idx],
-            x: node.x(),
-            y: node.y(),
-            width: newW || arr[idx].width,
-            height: newH || arr[idx].height,
-            rotation: node.rotation(),
-          } as PermisElement;
+          if (arr[idx].type === 'table') {
+            const targetWidth = computeTableTargetWidth();
+            const nextHeight = Math.max(60, newH || arr[idx].height || 0);
+            arr[idx] = {
+              ...arr[idx],
+              x: node.x(),
+              y: node.y(),
+              width: targetWidth,
+              height: nextHeight,
+              canvasWidth: currentCanvasSize.width,
+              pageLeftMargin: PAGE_MARGINS.left ?? 0,
+              pageRightMargin: PAGE_MARGINS.right ?? 0,
+              pageBottomMargin: PAGE_MARGINS.bottom ?? 0,
+              rotation: node.rotation(),
+            } as PermisElement;
+          } else {
+            arr[idx] = {
+              ...arr[idx],
+              x: node.x(),
+              y: node.y(),
+              width: newW || arr[idx].width,
+              height: newH || arr[idx].height,
+              rotation: node.rotation(),
+            } as PermisElement;
+          }
           if (node.scaleX) node.scaleX(1);
           if (node.scaleY) node.scaleY(1);
         }
@@ -2202,7 +2433,7 @@ const detailsFontSize = 30;
       next[currentPage] = arr;
       return next;
     });
-  }, [currentPage]);
+  }, [currentPage, computeTableTargetWidth, currentCanvasSize.width]);
 
   const handleTextChange = useCallback((id: string, newText: string) => {
     setElementsForCurrent(prev => prev.map(el => (el.id === id && el.type === 'text' ? { ...el, text: newText } : el)));
@@ -2225,6 +2456,9 @@ const detailsFontSize = 30;
     };
     const [start, end] = (start0 === end0) ? expandToWord(value, start0) : [start0, end0];
     if (start >= end) return;
+    const selectionSlice = value.slice(start, end);
+    const digitPatternLocal = /^[\s\u0030-\u0039\u0660-\u0669\u06F0-\u06F9\u2212\-\/\.]+$/u;
+    const digitsOnly = digitPatternLocal.test(selectionSlice);
 
     setPages(prev => {
       const next = [...prev] as PermisPages;
@@ -2275,8 +2509,11 @@ const detailsFontSize = 30;
           middle.underline = isUnderlineEverywhere ? false : true;
         }
         if (typeof opts.fontSizeDelta === 'number') {
-          const cur = typeof rg.fontSize === 'number' ? rg.fontSize : baseFont;
-          middle.fontSize = Math.max(8, Math.min(96, cur + opts.fontSizeDelta));
+          const current = typeof rg.fontSize === 'number' ? rg.fontSize : baseFont;
+          const baseline = digitsOnly ? Math.max(current, 20) : current;
+          middle.fontSize = Math.max(8, Math.min(96, baseline + opts.fontSizeDelta));
+        } else if (digitsOnly && typeof middle.fontSize !== 'number') {
+          middle.fontSize = 20;
         }
         transformed.push(middle);
         // right part
@@ -2287,7 +2524,12 @@ const detailsFontSize = 30;
         const middle: any = { start, end };
         if (opts.toggleBold) middle.fontWeight = isBoldEverywhere ? 'normal' : 'bold';
         if (opts.toggleUnderline) middle.underline = isUnderlineEverywhere ? false : true;
-        if (typeof opts.fontSizeDelta === 'number') middle.fontSize = Math.max(8, Math.min(96, baseFont + opts.fontSizeDelta));
+        if (typeof opts.fontSizeDelta === 'number') {
+          const baseline = digitsOnly ? Math.max(baseFont, 20) : baseFont;
+          middle.fontSize = Math.max(8, Math.min(96, baseline + opts.fontSizeDelta));
+        } else if (digitsOnly) {
+          middle.fontSize = 20;
+        }
         transformed.push(middle);
       }
       // Merge adjacent ranges with identical styles
@@ -2309,6 +2551,18 @@ const detailsFontSize = 30;
       pushHistory(JSON.parse(JSON.stringify(next)) as PermisPages);
       return next;
     });
+    if (typeof opts.fontSizeDelta === 'number') {
+      setTextOverlay(prev => {
+        if (!prev) return prev;
+        const selStart = Math.min(prev.selectionStart || 0, prev.selectionEnd || prev.selectionStart || 0);
+        const selEnd = Math.max(prev.selectionStart || 0, prev.selectionEnd || prev.selectionStart || 0);
+        const selSlice = prev.value.slice(selStart, selEnd);
+        const selectionDigits = digitPatternLocal.test(selSlice);
+        const currentBase = prev.fontSize / Math.max(zoom, 0.0001);
+        const updatedBase = selectionDigits ? Math.max(currentBase + opts.fontSizeDelta!, 20) : currentBase + opts.fontSizeDelta!;
+        return { ...prev, fontSize: Math.max(8, updatedBase) * zoom };
+      });
+    }
   }, [textOverlay, currentPage, setPages, pushHistory]);
 
   const handleAddElement = useCallback((type: 'text' | 'rectangle' | 'image' | 'line') => {
@@ -2683,6 +2937,8 @@ const detailsFontSize = 30;
         page2Elements.length > 0 ? page2Elements : createArticlesPage(initialData)
       ];
       setPages(newPages);
+      initialPagesRef.current = JSON.parse(JSON.stringify(newPages));
+      initialDataRef.current = initialData;
       setActiveTemplate(numericTemplateId);
       setSelectedIds([]);
       pushHistory(newPages);
@@ -2712,14 +2968,21 @@ const detailsFontSize = 30;
       if (affectsTableLayout) {
         next = next.map(el => {
           if (!selectedIdSet.has(el.id) || el.type !== 'table') return el;
-          const rows: any[] = Array.isArray((el as any).tableData) ? (el as any).tableData : [];
-          const blockCols = Math.max(1, Number((el as any).blockCols || 1));
-          const rowsPerCol = Math.max(1, Math.ceil((rows.length || 1) / blockCols));
-          const rowH = Math.max(12, Number((el as any).rowHeight || 34));
-          const hdrH = Math.max(0, Number((el as any).headerHeight || 48));
-          const newHeight = hdrH + rowH * (rowsPerCol + 1);
-          if (Math.abs((el.height || 0) - newHeight) > 0.5) {
-            return { ...el, height: newHeight } as any;
+          const cfg = deriveTableLayout(el as PermisElement);
+          const updates: Partial<PermisElement> = {};
+          if (Math.abs((el.height || 0) - cfg.height) > 0.5) updates.height = cfg.height;
+          if ((el as any).rowsPerCol !== cfg.rowsPerCol) updates.rowsPerCol = cfg.rowsPerCol;
+          if ((el as any).blockCols !== cfg.blockCols) updates.blockCols = cfg.blockCols;
+          const marginLeft = PAGE_MARGINS.left ?? 0;
+          const marginRight = PAGE_MARGINS.right ?? 0;
+          const marginBottom = PAGE_MARGINS.bottom ?? 0;
+          if (el.width == null || Math.abs((el.width || 0) - cfg.width) > 0.5) updates.width = cfg.width;
+          if ((el as any).canvasWidth !== currentCanvasSize.width) updates.canvasWidth = currentCanvasSize.width;
+          if ((el as any).pageLeftMargin !== marginLeft) updates.pageLeftMargin = marginLeft;
+          if ((el as any).pageRightMargin !== marginRight) updates.pageRightMargin = marginRight;
+          if ((el as any).pageBottomMargin !== marginBottom) updates.pageBottomMargin = marginBottom;
+          if (Object.keys(updates).length > 0) {
+            return { ...el, ...updates } as PermisElement;
           }
           return el;
         });
@@ -2800,8 +3063,7 @@ const detailsFontSize = 30;
         }
       } catch {}
     }
-  }, [selectedIds, setElementsForCurrent, textOverlay, zoom]);
-
+  }, [selectedIds, setElementsForCurrent, textOverlay, zoom, currentCanvasSize.width, setTextOverlay]);
 
   const handleZoom = useCallback((direction: 'in' | 'out') => {
     const newZoom = direction === 'in' ? zoom * 1.2 : zoom / 1.2;
@@ -2812,6 +3074,9 @@ const detailsFontSize = 30;
   const firstSelected = selectedElementsList[0];
   const onlyLineSelected = useMemo(() => (
     selectedIds.length > 0 && selectedIds.every(id => elements.find(e => e?.id === id)?.type === 'line')
+  ), [selectedIds, elements]);
+  const onlyTableSelected = useMemo(() => (
+    selectedIds.length === 1 && elements.find(e => e?.id === selectedIds[0])?.type === 'table'
   ), [selectedIds, elements]);
   // Keep rotation available for all shapes, including lines.
 
@@ -2890,10 +3155,11 @@ const detailsFontSize = 30;
     });
   }, [zoom]);
 
-  const commitTextEditor = useCallback((save: boolean) => {
+  const commitTextEditor = useCallback((save: boolean, opts: { fontSizeDelta?: number } = {}) => {
     if (!textOverlay) return;
     if (save) {
       const { id, value } = textOverlay;
+      const digitPattern = /^[\s\u0030-\u0039\u0660-\u0669\u06F0-\u06F9\u2212\-\/\.]+$/u;
       setPages(prev => {
         const next = [...prev] as PermisPages;
         const arr = next[currentPage] || [];
@@ -2979,14 +3245,72 @@ const detailsFontSize = 30;
             merged.push({...r});
           }
         }
+        merged.forEach(r => {
+          const slice = newText.slice(r.start, r.end);
+          if (digitPattern.test(slice)) {
+            r.fontSize = typeof r.fontSize === 'number' ? Math.max(r.fontSize, 20) : 20;
+          }
+        });
         arr[idx] = { ...el, text: value, styledRanges: merged } as any;
         next[currentPage] = arr;
         pushHistory(JSON.parse(JSON.stringify(next)) as PermisPages);
         return next;
       });
+      if (typeof opts.fontSizeDelta === 'number') {
+        setTextOverlay(prev => {
+          if (!prev) return prev;
+          const selStart = Math.min(prev.selectionStart || 0, prev.selectionEnd || prev.selectionStart || 0);
+          const selEnd = Math.max(prev.selectionStart || 0, prev.selectionEnd || prev.selectionStart || 0);
+        const selSlice = prev.value.slice(selStart, selEnd);
+        const selectionDigits = digitPattern.test(selSlice);
+          const currentBase = prev.fontSize / Math.max(zoom, 0.0001);
+          const nextBase = selectionDigits ? Math.max(currentBase + opts.fontSizeDelta!, 20) : currentBase + opts.fontSizeDelta!;
+          return { ...prev, fontSize: Math.max(8, nextBase) * zoom };
+        });
+      }
     }
     setTextOverlay(null);
-  }, [textOverlay, currentPage, setPages, pushHistory]);
+  }, [textOverlay, currentPage, setPages, pushHistory, setTextOverlay, zoom]);
+
+  useEffect(() => {
+    if (!textOverlay) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (textAreaRef.current && textAreaRef.current.contains(target)) return;
+      if (textToolbarRef.current && textToolbarRef.current.contains(target)) return;
+      commitTextEditor(true);
+    };
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+    };
+  }, [textOverlay, commitTextEditor]);
+
+  const handleOverlayDragStart = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!textOverlay) return;
+    const targetEl = event.target as HTMLElement;
+    if (targetEl && (targetEl.tagName === 'BUTTON' || targetEl.closest('button'))) return;
+    event.preventDefault();
+    const originLeft = textOverlay.left ?? 0;
+    const originTop = textOverlay.top ?? 0;
+    overlayDragRef.current = {
+      offsetX: event.clientX - originLeft,
+      offsetY: event.clientY - originTop,
+    };
+    const handleMove = (ev: MouseEvent) => {
+      if (!overlayDragRef.current) return;
+      const newLeft = ev.clientX - overlayDragRef.current.offsetX;
+      const newTop = ev.clientY - overlayDragRef.current.offsetY;
+      setTextOverlay(prev => (prev ? { ...prev, left: newLeft, top: newTop } : prev));
+    };
+    const handleUp = () => {
+      overlayDragRef.current = null;
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  }, [textOverlay, setTextOverlay]);
 
   const onTextAreaKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
@@ -3001,12 +3325,12 @@ const detailsFontSize = 30;
     }
     if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {
       e.preventDefault();
-      applySelectionStyle({ fontSizeDelta: 2 });
+      applySelectionStyle({ fontSizeDelta: 1 });
       return;
     }
     if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
       e.preventDefault();
-      applySelectionStyle({ fontSizeDelta: -2 });
+      applySelectionStyle({ fontSizeDelta: -1 });
       return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -3120,6 +3444,24 @@ const pageLabel = (idx: number) => {
               <div className={styles.zoomDisplay}>{Math.round(zoom * 100)}%</div>
               <button className={styles.iconBtn} onClick={() => handleZoom('in')}>+</button>
             </div>
+            <div className={styles.historyGroup}>
+              <button
+                className={styles.iconBtn}
+                onClick={undo}
+                disabled={!canUndo}
+                title="Undo (Ctrl+Z)"
+              >
+                <FiRotateCcw />
+              </button>
+              <button
+                className={styles.iconBtn}
+                onClick={redo}
+                disabled={!canRedo}
+                title="Redo (Ctrl+Y)"
+              >
+                <FiRotateCw />
+              </button>
+            </div>
             <div className={styles.resizeGroup}>
               <button className={styles.iconBtn} onClick={() => handleResizeCanvas('width', -50)} title="Decrease Width">
                 <FiChevronLeft /> W
@@ -3133,9 +3475,9 @@ const pageLabel = (idx: number) => {
               <button className={styles.iconBtn} onClick={() => handleResizeCanvas('height', 50)} title="Increase Height">
                 <FiChevronDown /> H
               </button>
-              <button className={styles.iconBtn} onClick={handleResetCanvasSize} title="Reset Size">
+              {/* <button className={styles.iconBtn} onClick={handleResetCanvasSize} title="Reset Size">
                 <FiRefreshCw />
-              </button>
+              </button> */}
             </div>
             <div className={styles.templateSection}>
               <select
@@ -3196,6 +3538,14 @@ const pageLabel = (idx: number) => {
             </div>
             <button
               className={`${styles.actionBtn}`}
+              onClick={handleResetLayout}
+              title="Restore layout to default positions"
+            >
+              <FiRefreshCw />
+              <span>Reset Layout</span>
+            </button>
+            {/* <button
+              className={`${styles.actionBtn}`}
               onClick={handleSavePermisOnly}
               disabled={savingPermis || isLoading || !!savedPermisId}
               title={savedPermisId ? 'Permis already exists' : 'Save Permis'}
@@ -3206,7 +3556,7 @@ const pageLabel = (idx: number) => {
                 <FiSave />
               )}
               <span>{savingPermis ? 'Saving...' : 'Save Permis'}</span>
-            </button>
+            </button> */}
             <button
               className={`${styles.actionBtn}`}
               onClick={handleSaveTemplateOnly}
@@ -3242,6 +3592,7 @@ const pageLabel = (idx: number) => {
                 onClick={async () => {
                   try {
                     setTool('qrcode');
+                    setLastQrDebug(null);
                     const targetId = savedPermisId || initialData.id_demande || initialData.id;
                     let qrPayload = '';
                     if (targetId) {
@@ -3252,6 +3603,12 @@ const pageLabel = (idx: number) => {
                         } catch {}
                         const resp = await axios.post(`${apiURL}/api/permis/${encodeURIComponent(targetId)}/qrcode/generate`, { by, username: by });
                         const code = resp?.data?.QrCode || '';
+                        // Persist backend debug information so we can show it in the UI
+                        setLastQrDebug({
+                          request: resp?.data?.request,
+                          debug: resp?.data?.debug
+                        });
+                        toast.info('QR code generated. See properties panel for debug details.');
                         // Use the unique code as QR payload
                         qrPayload = code;
                       } catch (e) {
@@ -3401,11 +3758,14 @@ const pageLabel = (idx: number) => {
                   anchorStrokeWidth={1}
                   borderStrokeWidth={1}
                   flipEnabled={true}
-                  enabledAnchors={onlyLineSelected ? ['middle-left', 'middle-right'] : undefined}
+                  enabledAnchors={onlyLineSelected ? ['middle-left', 'middle-right'] : (onlyTableSelected ? ['top-center', 'bottom-center'] : undefined)}
                   boundBoxFunc={(oldBox, newBox) => {
                     const nodes = transformerRef.current?.nodes?.() || [];
                     const hasLine = nodes.some((n: any) => n.getClassName && n.getClassName() === 'Line');
                     if (hasLine) return newBox;
+                    if (onlyTableSelected) {
+                      return { ...newBox, width: oldBox.width, x: oldBox.x };
+                    }
                     const minW = 4;
                     const minH = 4;
                     const shrinkingW = newBox.width < oldBox.width;
@@ -3435,6 +3795,7 @@ const pageLabel = (idx: number) => {
           </div>
           {textOverlay && (
             <textarea
+              ref={textAreaRef}
               autoFocus
               value={textOverlay.value}
               onChange={e =>
@@ -3469,7 +3830,9 @@ const pageLabel = (idx: number) => {
           )}
           {textOverlay && (
             <div
+              ref={textToolbarRef}
               className={styles.textOverlayToolbar}
+              onMouseDown={handleOverlayDragStart}
               style={{
                 left: (textOverlay.left || 0),
                 top: Math.max(8, (textOverlay.top || 0) - 40),
@@ -3477,8 +3840,13 @@ const pageLabel = (idx: number) => {
             >
               <button onMouseDown={(e) => { e.preventDefault(); applySelectionStyle({ toggleBold: true }); }}><strong>B</strong></button>
               <button onMouseDown={(e) => { e.preventDefault(); applySelectionStyle({ toggleUnderline: true }); }} style={{ textDecoration: 'underline' }}>U</button>
-              <button onMouseDown={(e) => { e.preventDefault(); applySelectionStyle({ fontSizeDelta: 2 }); }}>A+</button>
-              <button onMouseDown={(e) => { e.preventDefault(); applySelectionStyle({ fontSizeDelta: -2 }); }}>A-</button>
+              {selectionFontSizeInfo && (
+                <span className={styles.sizeBadge}>
+                  {selectionFontSizeInfo.mixed ? 'Mixte' : `${selectionFontSizeInfo.fontSize}px`}
+                </span>
+              )}
+              <button onMouseDown={(e) => { e.preventDefault(); applySelectionStyle({ fontSizeDelta: 1 }); }}>A+</button>
+              <button onMouseDown={(e) => { e.preventDefault(); applySelectionStyle({ fontSizeDelta: -1 }); }}>A-</button>
             </div>
           )}
         </main>
@@ -3498,7 +3866,13 @@ const pageLabel = (idx: number) => {
               <div className={styles.propRow}>
                 <label>Size</label>
                 <div className={styles.inlineInputs}>
-                  <input type="number" value={firstSelected.width || 0} onChange={(e) => handlePropertyChange('width', parseFloat(e.target.value || '0'))} />
+                  <input
+                    type="number"
+                    value={firstSelected.width || 0}
+                    onChange={(e) => handlePropertyChange('width', parseFloat(e.target.value || '0'))}
+                    disabled={firstSelected.type === 'table'}
+                    title={firstSelected.type === 'table' ? 'Table width is locked to 97% of the page width' : undefined}
+                  />
                   <input type="number" value={firstSelected.height || 0} onChange={(e) => handlePropertyChange('height', parseFloat(e.target.value || '0'))} />
                 </div>
               </div>
@@ -3514,6 +3888,14 @@ const pageLabel = (idx: number) => {
     <div className={styles.small}>
       This data will be encoded in the QR code
     </div>
+  </div>
+)}
+{firstSelected.type === 'qrcode' && lastQrDebug && (
+  <div className={styles.propRow}>
+    <label>Last QR Debug</label>
+    <pre className={styles.qrDebugBlock}>
+      {JSON.stringify(lastQrDebug, null, 2)}
+    </pre>
   </div>
 )}
               {firstSelected.type === 'text' && (
