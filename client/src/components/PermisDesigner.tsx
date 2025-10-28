@@ -52,6 +52,65 @@ interface QRCodeData {
 
 type PermisPages = PermisElement[][];
 
+const COORDINATE_COLUMN_KEYS = ['x', 'y', 'point'];
+
+const isCoordinateTableElement = (element: PermisElement): boolean => {
+  if (!element || element.type !== 'table') return false;
+  const columns = Array.isArray((element as any).tableColumns) ? (element as any).tableColumns : [];
+  if (!columns.length) return false;
+  const keySet = new Set(
+    columns
+      .map(col => (col && col.key != null ? String(col.key).toLowerCase() : ''))
+      .filter(Boolean)
+  );
+  return COORDINATE_COLUMN_KEYS.every(k => keySet.has(k));
+};
+
+const normalizeCoordinateTableElement = (element: PermisElement): PermisElement => {
+  if (!isCoordinateTableElement(element)) return element;
+  const next: any = { ...element };
+  let changed = false;
+  const minFontSize = 20;
+  const candidateFont = Number(next.tableFontSize ?? next.fontSize ?? 0);
+  const enforcedFont = candidateFont && Number.isFinite(candidateFont)
+    ? Math.max(minFontSize, candidateFont)
+    : minFontSize;
+  if (next.tableFontSize == null || next.tableFontSize < enforcedFont) {
+    next.tableFontSize = enforcedFont;
+    changed = true;
+  }
+  if (next.fontSize != null && next.fontSize < enforcedFont) {
+    next.fontSize = enforcedFont;
+    changed = true;
+  }
+  const minimumRowHeight = Math.max(36, Math.ceil(enforcedFont * 1.6));
+  if (!next.rowHeight || next.rowHeight < minimumRowHeight) {
+    next.rowHeight = minimumRowHeight;
+    changed = true;
+  }
+  return changed ? next : element;
+};
+
+const normalizeCoordinateTablePage = (page: PermisElement[]): PermisElement[] => {
+  let changed = false;
+  const normalized = page.map(el => {
+    const updated = normalizeCoordinateTableElement(el);
+    if (updated !== el) changed = true;
+    return updated;
+  });
+  return changed ? normalized : page;
+};
+
+const normalizeCoordinateTables = (pages: PermisPages): PermisPages => {
+  let changed = false;
+  const normalized = pages.map(page => {
+    const updatedPage = normalizeCoordinateTablePage(page || []);
+    if (updatedPage !== page) changed = true;
+    return updatedPage;
+  });
+  return changed ? normalized : pages;
+};
+
 const PermisDesigner: React.FC<PermisDesignerProps> = ({
   initialData,
   onSave,
@@ -59,7 +118,7 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
   onSavePermis,
   procedureId
 }) => {
-  const [pages, setPages] = useState<PermisPages>([[], [], []]);
+  const [pages, setPagesState] = useState<PermisPages>([[], [], []]);
   const [currentPage, setCurrentPage] = useState<number>(PAGES.PERMIS_DETAILS);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [tool, setTool] = useState<'select' | 'text' | 'rectangle' | 'image' | 'line' | 'qrcode' | 'table'>('select');
@@ -71,6 +130,13 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
   const [activeTemplate, setActiveTemplate] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
   const [showGrid, setShowGrid] = useState(false);
+  const setPages = useCallback((value: PermisPages | ((prev: PermisPages) => PermisPages)) => {
+    if (typeof value === 'function') {
+      setPagesState(prev => normalizeCoordinateTables((value as (prev: PermisPages) => PermisPages)(prev)));
+    } else {
+      setPagesState(normalizeCoordinateTables(value));
+    }
+  }, [setPagesState]);
   const [history, setHistory] = useState<PermisPages[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [articles, setArticles] = useState<ArticleItem[]>([]);
@@ -285,13 +351,15 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
   const historyIndexRef = useRef(historyIndex);
   useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
   const pushHistory = useCallback((snap: PermisPages) => {
+    const normalized = normalizeCoordinateTables(snap);
     setHistory(prev => {
       const trimmed = prev.slice(0, historyIndexRef.current + 1);
-      const next = [...trimmed, JSON.parse(JSON.stringify(snap)) as PermisPages];
+      const next = [...trimmed, JSON.parse(JSON.stringify(normalized)) as PermisPages];
       setHistoryIndex(next.length - 1);
       return next;
     });
-  }, []);
+    return normalized;
+  }, [setHistory, setHistoryIndex]);
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex >= 0 && historyIndex < history.length - 1;
@@ -1802,7 +1870,7 @@ const detailsFontSize = 30;
         blockCols,
         colWidths: baseColWidths,
         tableFontFamily: ARABIC_FONTS[0],
-        tableFontSize: 18,
+        tableFontSize: 20,
         tableTextAlign: 'right',
         headerTextAlign: 'center',
         showCellBorders: true,
@@ -3731,7 +3799,7 @@ const pageLabel = (idx: number) => {
                         const data = Array.isArray((tbl as any).tableData) ? (tbl as any).tableData : [];
                         const row = data[rowIndex] || {};
                         const value = row[colKey] != null ? String(row[colKey]) : '';
-                        const baseFont = (tbl as any).tableFontSize || (tbl as any).fontSize || 18;
+                        const baseFont = Math.max(20, (tbl as any).tableFontSize || (tbl as any).fontSize || 18);
                         setTextOverlay({
                           id: `table:${tbl.id}:${rowIndex}:${colKey}`,
                           value,

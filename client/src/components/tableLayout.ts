@@ -64,7 +64,8 @@ export const deriveTableLayout = (element: PermisElement): TableLayoutConfig => 
   const stroke = element.stroke || '#000';
   const strokeWidth = toNumber((element as any).strokeWidth) ?? 1.2;
   const fontFamily = element.tableFontFamily || element.fontFamily || 'Arial';
-  const fontSize = toNumber((element as any).tableFontSize ?? (element as any).fontSize) ?? 17;
+  const rawFontSize = toNumber((element as any).tableFontSize ?? (element as any).fontSize) ?? 17;
+  const fontSize = Math.max(20, rawFontSize);
   const textAlign = (element as any).tableTextAlign || 'center';
   const headerTextAlign = (element as any).headerTextAlign || 'center';
   const showHeader = (element as any).showHeader !== false;
@@ -72,6 +73,10 @@ export const deriveTableLayout = (element: PermisElement): TableLayoutConfig => 
 
   let headerHeight = Math.max(0, toNumber((element as any).headerHeight) ?? 28);
   let rowHeight = Math.max(MIN_ROW_HEIGHT, Math.floor(toNumber((element as any).rowHeight) || 34));
+  const minHeightForFont = Math.max(MIN_ROW_HEIGHT, Math.ceil(fontSize * 1.6));
+  if (rowHeight < minHeightForFont) {
+    rowHeight = minHeightForFont;
+  }
 
   const columnsSource = Array.isArray(element.tableColumns) && element.tableColumns.length > 0
     ? element.tableColumns
