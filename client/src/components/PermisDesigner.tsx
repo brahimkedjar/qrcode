@@ -1900,7 +1900,9 @@ const detailsFontSize = 30;
         // Match band width and position to the table, and tuck directly under it
         const bandW = Math.floor((tableEl as any).width);
         const bandX = Math.floor((tableEl as any).x);
-        const baseY = (tableEl as any).y + (tableEl as any).height + 2;
+        // Add vertical padding between table bottom and the notice band
+        const topBandPadding = 35;
+        const baseY = (tableEl as any).y + (tableEl as any).height + topBandPadding;
         const dblGap = 3;
         const titleFontSize = 32;
         const titlePadding = 2;
@@ -1914,8 +1916,25 @@ const detailsFontSize = 30;
         els.push({ id: uuidv4(), type: 'line', x: bandX, y: topY2, width: bandW, height: 0, stroke: '#000', strokeWidth: 1.2, draggable: true } as any);
         // Title text centered between doubles
         const noticeText = `سند منجمي مسجل في السجل المنجمي تحت رقم : ${LRM}${code} ${LRM}${typeCode}`;
+        const codePartNotice = `${LRM}${code} ${LRM}${typeCode}`;
+        const codeStartNotice = noticeText.indexOf(codePartNotice);
         const noticeFontSize = titleFontSize;
-        els.push({ id: uuidv4(), type: 'text', x: bandX, y: textY, width: bandW, text: noticeText, language: 'ar', direction: 'rtl', fontSize: noticeFontSize, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' } as any);
+        els.push({
+          id: uuidv4(),
+          type: 'text',
+          x: bandX,
+          y: textY,
+          width: bandW,
+          text: noticeText,
+          language: 'ar',
+          direction: 'rtl',
+          fontSize: noticeFontSize,
+          fontFamily: ARABIC_FONTS[0],
+          color: '#000',
+          draggable: true,
+          textAlign: 'center',
+          styledRanges: codeStartNotice >= 0 ? [{ start: codeStartNotice, end: codeStartNotice + codePartNotice.length, fontSize: 29 }] : undefined,
+        } as any);
         
         // Dynamic diagonal line starting from the left edge of the page band under the sentence to the bottom-left corner
         try {
@@ -2049,6 +2068,8 @@ const detailsFontSize = 30;
       const typeCode = data?.typePermis?.code || '';
       const code = data?.code_demande || data?.codeDemande || '';
       const bottomNotice = `سند منجمي مسجل في السجل المنجمي تحت رقم : ${LRM}${code} ${LRM}${typeCode}`;
+      const codePartBottom = `${LRM}${code} ${LRM}${typeCode}`;
+      const codeStartBottom = bottomNotice.indexOf(codePartBottom);
       // Bottom notice band is always 90% of page width
       const noticeWidth = Math.floor(DEFAULT_CANVAS.width * 0.9);
       const noticeX = (DEFAULT_CANVAS.width - noticeWidth) / 2;
@@ -2070,14 +2091,24 @@ const detailsFontSize = 30;
         opacity: 1,
         wrap: 'none',
         lineHeight: 1.2,
-        meta: { isFooter: true }
+        meta: { isFooter: true },
+        styledRanges: codeStartBottom >= 0 ? [{ start: codeStartBottom, end: codeStartBottom + codePartBottom.length, fontSize: 29 }] : undefined,
       } as any);
 
       // Dynamic diagonal line starting from the end of the bottom notice text to the bottom-left corner
       try {
         const noticeFontSize = 32;
         const centerX = noticeX + noticeWidth / 2;
-        const textW = Math.max(1, measureTextWidth(bottomNotice, noticeFontSize, ARABIC_FONTS[0]));
+        let textW = Math.max(1, measureTextWidth(bottomNotice, noticeFontSize, ARABIC_FONTS[0]));
+        try {
+          if (typeof codeStartBottom === 'number' && codeStartBottom >= 0) {
+            const prefixText = bottomNotice.slice(0, codeStartBottom);
+            const codeText = bottomNotice.slice(codeStartBottom, codeStartBottom + codePartBottom.length);
+            const prefixW = measureTextWidth(prefixText, noticeFontSize, ARABIC_FONTS[0]);
+            const codeW = measureTextWidth(codeText, 29, ARABIC_FONTS[0]);
+            textW = Math.max(1, prefixW + codeW);
+          }
+        } catch {}
         // Arabic text logical end sits on the left-most edge when centered
         const xStart = centerX - textW / 2 - 4; // small visual padding
         const yStart = noticeY + noticeFontSize * 0.7; // approximate baseline
