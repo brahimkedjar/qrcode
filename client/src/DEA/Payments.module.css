@@ -1,0 +1,1149 @@
+/* Payments.module.css */
+
+/* ========== Global Styles ========== */
+.container {
+  --primary-color: #4361ee;
+  --secondary-color: #3f37c9;
+  --accent-color: #4895ef;
+  --danger-color: #f72585;
+  --success-color: #4cc9f0;
+  --warning-color: #f8961e;
+  --light-color: #f8f9fa;
+  --dark-color: #212529;
+  --gray-color: #6c757d;
+  --light-gray: #e9ecef;
+  --primary: #4361ee;
+  --primary-dark: #3a56d4;
+  --success: #2ecc71;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: none;
+  font-size: 1rem;
+}
+
+.btnSave {
+  border-radius: 8px;
+  cursor: pointer;
+  background-color: #4361ee;
+  color: #fff;
+  transition: all 0.3s ease;
+  border: none;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.75rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  display: inline-flex;
+}
+
+.btn-icon {
+  font-size: 1.1rem;
+}
+
+.btn-primary {
+  background-color: #4361ee;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #3a56d4;
+  transform: translateY(-2px);
+}
+
+.btn-success {
+  background-color: #2ecc71;
+  color: white;
+}
+
+.btn-success:hover {
+  background-color: #27ae60;
+  transform: translateY(-2px);
+}
+
+.btn-warning {
+  background-color: #f39c12;
+  color: white;
+}
+
+.btn-warning:hover {
+  background-color: #e67e22;
+  transform: translateY(-2px);
+}
+
+.btn-outline {
+  background-color: transparent;
+  border: 1px solid #6c757d;
+  color: #6c757d;
+}
+
+.btn-outline:hover {
+  background-color: #e9ecef;
+  color: #343a40;
+}
+
+.btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #f8fafc;
+  color: var(--dark);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.5;
+}
+
+.app-content {
+  display: flex;
+  flex: 1;
+}
+
+.main-content {
+  flex: 1;
+  padding: 2rem;
+  background-color: #fff;
+  transition: var(--transition);
+}
+
+/* ========== Container & Layout ========== */
+.container {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+
+.title {
+    display: flex;
+    color: var(--primary-color);
+    margin-bottom: 1.5rem 24px;
+    padding-bottom: .5rem;
+    font-size: 2rem;
+    font-weight: 700;
+    position: relative;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.title::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 60px;
+  height: 4px;
+  background: linear-gradient(to right, var(--primary-color), var(--accent-color));
+  border-radius: 2px;
+}
+
+/* ========== Sections ========== */
+.summarySection, .paymentSection {
+  background: white;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.summarySection h2, .paymentSection h2 {
+  font-size: 1.5rem;
+  color: var(--dark-color);
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+/* ========== Tables ========== */
+.tableContainer {
+  overflow-x: auto;
+}
+
+.summaryTable, .obligationsTable, .paymentsTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.9rem;
+}
+
+.summaryTable th, .obligationsTable th, .paymentsTable th {
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.summaryTable td, .obligationsTable td, .paymentsTable td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--light-gray);
+  vertical-align: middle;
+}
+
+.summaryTable tr:last-child td, .obligationsTable tr:last-child td {
+  border-bottom: none;
+}
+
+.summaryTable tr:hover, .obligationsTable tr:hover, .paymentsTable tr:hover {
+  background-color: rgba(67, 97, 238, 0.05);
+}
+
+.selectedRow {
+  background-color: rgba(67, 97, 238, 0.1) !important;
+  border-left: 3px solid var(--primary-color);
+}
+
+.totalRow {
+  font-weight: 600;
+  background-color: rgba(67, 97, 238, 0.05);
+}
+
+.totalRow td {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.legalReference {
+  font-size: 0.8rem;
+  color: var(--gray-color);
+  margin-top: 0.25rem;
+}
+
+/* ========== Status Badges ========== */
+.statusBadge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.statusPaid {
+  background-color: rgba(76, 201, 240, 0.1);
+  color: var(--success-color);
+}
+
+.statusPending {
+  background-color: rgba(248, 150, 30, 0.1);
+  color: var(--warning-color);
+}
+
+.statusLate {
+  background-color: rgba(247, 37, 133, 0.1);
+  color: var(--danger-color);
+}
+
+.statusDefault {
+  background-color: var(--light-gray);
+  color: var(--gray-color);
+}
+
+/* ========== Payment Form ========== */
+.paymentFormContainer {
+  margin-top: 2rem;
+}
+
+.formTitle {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+  color: var(--dark-color);
+}
+
+.formInstructions {
+  color: var(--gray-color);
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.paymentForm {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.formGroup {
+  margin-bottom: 1rem;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: var(--dark-color);
+}
+
+.formGroup input,
+.formGroup select {
+  width: 91%;
+  padding: 0.75rem;
+  border: 1px solid var(--light-gray);
+  border-radius: var(--border-radius);
+  font-size: 0.9rem;
+  transition: var(--transition);
+}
+
+.formGroup input:focus,
+.formGroup select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.2);
+}
+
+.fileUpload {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.fileUpload input[type="file"] {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.fileInfo {
+  display: inline-block;
+  padding: 0.75rem;
+  background-color: var(--light-gray);
+  border: 1px dashed var(--gray-color);
+  border-radius: var(--border-radius);
+  width: 100%;
+  font-size: 0.9rem;
+  color: var(--gray-color);
+}
+
+.fileHint {
+  font-size: 0.8rem;
+  color: var(--gray-color);
+  margin-top: 0.5rem;
+}
+
+.submitButton {
+  grid-column: 1 / -1;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--border-radius);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  margin-top: 0.5rem;
+}
+
+.submitButton:hover {
+  background-color: var(--primary-dark);
+}
+
+.submitButton:disabled {
+  background-color: var(--gray-color);
+  cursor: not-allowed;
+}
+
+/* ========== Payments History ========== */
+.paymentsHistory {
+  margin-top: 2rem;
+}
+
+.sectionTitle {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  color: var(--dark-color);
+}
+
+.noPayments {
+  color: var(--gray-color);
+  font-style: italic;
+  text-align: center;
+  padding: 1rem;
+}
+
+.downloadLink {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+  transition: var(--transition);
+}
+
+.downloadLink:hover {
+  text-decoration: underline;
+  color: var(--primary-dark);
+}
+
+/* ========== Error & Loading States ========== */
+.error {
+  color: var(--danger-color);
+  background-color: rgba(247, 37, 133, 0.1);
+  padding: 1rem;
+  border-radius: var(--border-radius);
+  margin-bottom: 1rem;
+  border-left: 3px solid var(--danger-color);
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+/* ========== Obligation Header ========== */
+.obligationHeader {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--light-gray);
+}
+
+.obligationHeader h3 {
+  font-size: 1.1rem;
+  color: var(--dark-color);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.amountDue {
+  font-size: 0.9rem;
+  color: var(--gray-color);
+  font-weight: 400;
+}
+
+/* ========== Responsive Design ========== */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 1rem;
+  }
+  
+  .title {
+    font-size: 1.75rem;
+  }
+  
+  .summarySection, .paymentSection {
+    padding: 1rem;
+  }
+  
+  .paymentForm {
+    grid-template-columns: 1fr;
+  }
+  
+  .obligationHeader h3 {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .amountDue {
+    margin-top: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .title {
+    font-size: 1.5rem;
+  }
+  
+  .summaryTable th, 
+  .obligationsTable th, 
+  .paymentsTable th,
+  .summaryTable td, 
+  .obligationsTable td, 
+  .paymentsTable td {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
+  
+  .statusBadge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
+  }
+}
+
+.paidStatus {
+  color: green;
+  font-weight: bold;
+}
+
+.overdueStatus {
+  color: red;
+  font-weight: bold;
+}
+
+.partialStatus {
+  color: orange;
+  font-weight: bold;
+}
+
+.pendingStatus {
+  color: blue;
+  font-weight: bold;
+}
+
+/* Progress Steps */
+/* Progress Steps */
+.progressContainer {
+  margin-bottom: 3rem;
+}
+
+.progressSteps {
+  display: flex;
+  align-items: center;
+  position: relative;
+  margin-bottom: 0.75rem;
+  justify-content: space-between;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  text-align: center;
+  flex: 1;
+  z-index: 1;
+}
+
+.stepCircle {
+  width: 36px;
+  height: 36px;
+  background-color: var(--light-gray);
+  color: var(--dark);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: var(--transition);
+  border: 2px solid transparent;
+}
+
+.stepLabel {
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
+  color: var(--gray);
+  font-weight: 500;
+  transition: var(--transition);
+}
+
+.step.active .stepCircle {
+  background-color: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(67, 97, 238, 0.2);
+}
+
+.step.completed .stepCircle {
+  background-color: var(--success);
+  color: white;
+  border-color: var(--success);
+}
+
+.stepConnector {
+  position: absolute;
+  top: 18px;
+  left: calc(50% + 18px);
+  right: calc(-50% + 18px);
+  height: 2px;
+  background-color: var(--light-gray);
+  z-index: -1;
+}
+
+.progressBar {
+  height: 6px;
+  background-color: var(--light-gray);
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background-color: var(--primary);
+  transition: width 0.5s ease;
+  border-radius: 3px;
+}
+
+.finalize-button-container {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.finalize-button {
+  background-color: #0f9d58;
+  color: white;
+  font-weight: bold;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.finalize-button:hover {
+  background-color: #0c7c43;
+}
+
+/* Payments.module.css additions */
+
+.taxeSection {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #007bff;
+}
+
+.taxeSummary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.taxeInfo {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem;
+  background: white;
+  border-radius: 4px;
+}
+
+.taxeDetailsTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  background: white;
+}
+
+.taxeDetailsTable th,
+.taxeDetailsTable td {
+  padding: 0.75rem;
+  border: 1px solid #dee2e6;
+  text-align: center;
+}
+
+.taxeDetailsTable th {
+  background: #e9ecef;
+  font-weight: 600;
+}
+
+.taxeExplanation {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 4px;
+  border-left: 4px solid #28a745;
+}
+
+.taxeExplanation h4 {
+  margin: 0 0 0.5rem 0;
+  color: #28a745;
+}
+
+/* Status badges */
+.statusBadge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.statusBadge[data-status="Payé"] {
+  background: #d4edda;
+  color: #155724;
+}
+
+.statusBadge[data-status="A payer"] {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.statusBadge[data-status="En retard"] {
+  background: #f8d7da;
+  color: #721c24;
+}
+/* Payments.module.css additions for status badges */
+
+.statusBadge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-block;
+  min-width: 80px;
+  text-align: center;
+}
+
+.statusBadge.A_payer {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.statusBadge.Payé {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.statusBadge.En_retard {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.statusBadge.Partiellement_payé {
+  background: #cce5ff;
+  color: #004085;
+  border: 1px solid #b8daff;
+}
+
+.statusBadge.default {
+  background: #e9ecef;
+  color: #495057;
+  border: 1px solid #dee2e6;
+}
+/* Taxe Superficiaire Section */
+.taxeSection {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.taxeSummary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.taxeInfo {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+.taxeInfo span {
+  font-size: 0.875rem;
+  color: #6c757d;
+  margin-bottom: 0.25rem;
+}
+
+.taxeDetailsTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  background: white;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.taxeDetailsTable th,
+.taxeDetailsTable td {
+  padding: 0.75rem;
+  text-align: center;
+  border: 1px solid #dee2e6;
+  font-size: 0.875rem;
+}
+
+.taxeDetailsTable th {
+  background: #e9ecef;
+  font-weight: 600;
+}
+
+.taxeDetailsTable tr:nth-child(even) {
+  background: #f8f9fa;
+}
+
+.taxeExplanation {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+.taxeExplanation h4 {
+  margin-bottom: 0.5rem;
+  color: #495057;
+}
+
+.statusBadge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.statusBadge.Payé {
+  background: #d4edda;
+  color: #155724;
+}
+
+.statusBadge.A_payer {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.statusBadge.En_retard {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* Add to your existing Payments.module.css */
+/* Add to your existing Payments.module.css */
+
+.order-generation-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.order-generation-section h2 {
+  margin-bottom: 0.5rem;
+  color: #2c3e50;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.order-buttons {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.order-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(to bottom, #3498db, #2980b9);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.order-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  background: linear-gradient(to bottom, #2980b9, #2573a7);
+}
+
+.order-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.order-button:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.button-icon {
+  font-size: 1.1rem;
+}
+
+/* Loading animation for generating state */
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.order-button:disabled:not(.generating) {
+  opacity: 0.7;
+}
+
+.order-button:disabled.generating {
+  animation: pulse 1.5s infinite;
+}
+/* Add to your existing Payments.module.css */
+
+/* Modal Styles */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modalContent {
+  background: white;
+  border-radius: 8px;
+  width: 95%;
+  max-width: 95%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.modalHeader {
+  padding: 1.5rem;
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f8f9fa;
+}
+
+.modalHeader h2 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.5rem;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6c757d;
+  padding: 0.25rem;
+  border-radius: 4px;
+}
+
+.closeButton:hover {
+  color: #495057;
+  background-color: #e9ecef;
+}
+
+.modalBody {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+}
+
+.previewContainer {
+  width: 100%;
+  height: 90vh;
+}
+
+.previewIframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.editorContainer {
+  display: flex;
+  height: 60vh;
+}
+
+.editorForm {
+  width: 300px;
+  padding: 1.5rem;
+  border-right: 1px solid #e9ecef;
+  overflow-y: auto;
+  background-color: #f8f9fa;
+}
+
+.formGroup {
+  margin-bottom: 1rem;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #495057;
+}
+
+.formGroup input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.formGroup input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.modalFooter {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e9ecef;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  background-color: #f8f9fa;
+}
+
+.editButton, .downloadButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.editButton {
+  background-color: #6c757d;
+  color: white;
+}
+
+.editButton:hover {
+  background-color: #5a6268;
+}
+
+.downloadButton {
+  background-color: #28a745;
+  color: white;
+}
+
+.downloadButton:hover {
+  background-color: #218838;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .editorContainer {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .editorForm {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e9ecef;
+  }
+  
+  .previewContainer {
+    height: 40vh;
+  }
+}
+
+.downloadSelectButton {
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.downloadSelectButton:hover {
+  background-color: #f0f0f0;
+}
+
+.downloadSelectButton.selected {
+  background-color: #e6f7ff;
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.periodDisplay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dateBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 8px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  min-width: 80px;
+}
+
+.dateBox .label {
+  font-size: 10px;
+  color: #666;
+  text-transform: uppercase;
+}
+
+.dateBox .date {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.arrow {
+  color: #999;
+}
+
+.fiscalYear {
+  font-weight: 500;
+  color: #333;
+}
+
+.downloadSelectButton {
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.downloadSelectButton:hover {
+  background-color: #f0f0f0;
+}
+
+.downloadSelectButton.selected {
+  background-color: #e6f7ff;
+  border-color: #1890ff;
+  color: #1890ff;
+}

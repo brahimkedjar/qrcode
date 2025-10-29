@@ -6,6 +6,7 @@ import PermisDesigner from './components/PermisDesigner';
 import LoginView from './components/auth/LoginView';
 import AuthHeader from './components/auth/AuthHeader';
 import PdfGallery from './components/PdfGallery';
+import TaxesPage from './components/taxes/TaxesPage';
 import VerifyQrView from './components/verify/VerifyQrView';
 import panelStyles from './components/loader/PermisLoader.module.css';
 
@@ -13,7 +14,7 @@ const API_URL = (import.meta as any).env?.VITE_API_URL || '';
 
 export default function App() {
   const [authUser, setAuthUser] = useState<string>('');
-  const [view, setView] = useState<'designer' | 'verify' | 'pdfs'>('designer');
+  const [view, setView] = useState<'designer' | 'verify' | 'pdfs' | 'taxes'>('designer');
   const [permisId, setPermisId] = useState<string>('');
   const [initialData, setInitialData] = useState<any | null>(null);
   const [procedureRef, setProcedureRef] = useState<number | null>(null);
@@ -90,11 +91,13 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: 'Inter, system-ui, Arial' }}>
-      <AuthHeader userName={authUser} onLogout={doLogout} view={view} onChangeView={setView} />
+      <AuthHeader userName={authUser} onLogout={doLogout} view={view as any} onChangeView={setView as any} />
       {view === 'verify' ? (
         <VerifyQrView />
       ) : view === 'pdfs' ? (
         <PdfGallery />
+      ) : view === 'taxes' ? (
+        <TaxesPage />
       ) : (
         <div className={panelStyles.wrap}>
           <div className={panelStyles.hero}>

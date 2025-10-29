@@ -1,0 +1,69 @@
+.appContainer {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.appContent {
+  display: flex;
+  flex: 1;
+}
+
+.mainContent {
+  flex: 1;
+  padding: 1.5rem 2rem;
+  background-color: #fff;
+}
+/* Fix dropdown z-index issues */
+.ant-dropdown {
+  z-index: 9999 !important;
+}
+
+/* Ensure dropdown menu is visible */
+.ant-dropdown-menu {
+  position: relative !important;
+}
+/* Breadcrumb */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  color: #888;
+}
+
+.breadcrumb-arrow {
+  font-size: 1.25rem;
+}
+.dataLoadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  height: 100%;
+  background: #f8f9fa;
+}
+
+.dataLoadingContent {
+  text-align: center;
+  margin-top: 2rem;
+}
+
+.dataReadinessStatus {
+  display: flex;
+  gap: 2rem;
+  margin-top: 1rem;
+  justify-content: center;
+}
+
+.ready {
+  color: #52c41a;
+  font-weight: 500;
+}
+
+.pending {
+  color: #faad14;
+  font-weight: 500;
+}

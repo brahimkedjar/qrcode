@@ -168,10 +168,26 @@ export class AccessService {
         this.lastErrorMessage = `[ODBC PARAM ERROR] ${e?.message || e} ${errors}`;
         // eslint-disable-next-line no-console
         console.error('ODBC param query error:', this.lastErrorMessage);
+        // Known case: Access ODBC driver doesn't support SQLDescribeParam
+        const msg = String(e?.message || '').toLowerCase();
+        const notSupported = msg.includes('does not support this function') || msg.includes('information about parameters') || errors.includes('IM001');
+        if (notSupported) {
+          // Inline params safely and run as plain text query via ODBC
+          let inlined = sql;
+          for (const p of params) {
+            const lit: string = typeof p === 'number' ? String(p) : (this.escapeValue(String(p)) as string);
+            inlined = inlined.replace('?', lit);
+          }
+          try {
+            return await this.query(inlined);
+          } catch (e2) {
+            throw e2;
+          }
+        }
         throw e;
       }
     }
-    // Fallback: inline parameters into SQL safely for ADODB
+    // Fallback for ADODB or other modes: inline parameters
     let inlined = sql;
     for (const p of params) {
       const lit: string = typeof p === 'number' ? String(p) : (this.escapeValue(String(p)) as string);

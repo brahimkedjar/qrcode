@@ -4,8 +4,8 @@ import styles from './header.module.css';
 type Props = {
   userName: string;
   onLogout: () => void;
-  view?: 'designer' | 'verify' | 'pdfs';
-  onChangeView?: (v: 'designer' | 'verify' | 'pdfs') => void;
+  view?: 'designer' | 'verify' | 'pdfs' | 'taxes';
+  onChangeView?: (v: 'designer' | 'verify' | 'pdfs' | 'taxes') => void;
 };
 
 export default function AuthHeader({ userName, onLogout, view = 'designer', onChangeView }: Props) {
@@ -21,6 +21,7 @@ export default function AuthHeader({ userName, onLogout, view = 'designer', onCh
             <button className={`${styles.tab} ${view === 'designer' ? styles.tabActive : ''}`} onClick={() => onChangeView('designer')}>Designer</button>
             <button className={`${styles.tab} ${view === 'verify' ? styles.tabActive : ''}`} onClick={() => onChangeView('verify')}>Vérifier QR</button>
             <button className={`${styles.tab} ${view === 'pdfs' ? styles.tabActive : ''}`} onClick={() => onChangeView('pdfs')}>PDFs</button>
+            <button className={`${styles.tab} ${view === 'taxes' ? styles.tabActive : ''}`} onClick={() => onChangeView('taxes')}>Taxes</button>
           </div>
         )}
         <div className={styles.user}>{userName}</div>
