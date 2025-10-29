@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -183,7 +183,14 @@ export class PermisService {
       wilaya: wilayaVal,
       commune: communeVal,
       daira: dairaVal,
-      lieudit: lieuditVal
+      lieudit: lieuditVal,
+      is_signed: (() => {
+        const v = (r as any).is_signed;
+        if (v === true) return true;
+        if (v === false) return false;
+        const s = String(v ?? '').trim().toLowerCase();
+        return s === 'true' || s === 'yes' || s === '-1' || s === '1';
+      })()
     };
     // Add compatibility fields expected by designer
     val.code_demande = val.codeDemande;
@@ -364,6 +371,24 @@ export class PermisService {
     await tryAlter(`ALTER TABLE ${t} ADD COLUMN QrCode TEXT(50)`);
     await tryAlter(`ALTER TABLE ${t} ADD COLUMN code_wilaya TEXT(5)`);
     await tryAlter(`ALTER TABLE ${t} ADD COLUMN Qrinsererpar TEXT(100)`);
+  }
+
+  private async ensureSignedColumn() {
+    const t = (DEFAULT_TABLES as any).permis;
+    const tryAlter = async (sql: string) => { try { await this.access.query(sql); } catch {} };
+    await tryAlter(`ALTER TABLE ${t} ADD COLUMN is_signed YESNO`);
+    await tryAlter(`ALTER TABLE ${t} ADD COLUMN is_signed BIT`);
+  }
+
+  async setSignedFlag(id: string, value: boolean) {
+    await this.ensureSignedColumn();
+    const t: any = (DEFAULT_TABLES as any).permis;
+    const c: any = (DEFAULT_COLUMNS as any).permis;
+    const isNumericId = /^\d+$/.test(String(id));
+    const lit = value ? 1 : 0;
+    const sql = `UPDATE ${t} SET is_signed = ${lit} WHERE ${c.id} = ${isNumericId ? id : this.access.escapeValue(String(id))}`;
+    await this.access.query(sql);
+    return { ok: true, is_signed: !!value };
   }
 
   private loadWilayaCodeMap(): Record<string, string> {

@@ -153,6 +153,40 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
     } catch { return 'high'; }
   });
   const apiURL = process.env.NEXT_PUBLIC_API_URL;
+  const [isSigned, setIsSigned] = useState<boolean>(() => {
+    try {
+      const v = (initialData as any)?.is_signed ?? (initialData as any)?.isSigned;
+      if (v === true) return true;
+      if (v === false) return false;
+      const s = String(v ?? '').toLowerCase();
+      return s === 'true' || s === 'yes' || s === '1' || s === '-1';
+    } catch { return false; }
+  });
+  useEffect(() => {
+    try {
+      const v = (initialData as any)?.is_signed ?? (initialData as any)?.isSigned;
+      if (v === undefined) return;
+      if (v === true) setIsSigned(true);
+      else if (v === false) setIsSigned(false);
+      else {
+        const s = String(v ?? '').toLowerCase();
+        setIsSigned(s === 'true' || s === 'yes' || s === '1' || s === '-1');
+      }
+    } catch {}
+  }, [initialData]);
+
+  const toggleSigned = useCallback(async () => {
+    const id = (initialData as any)?.id ?? (initialData as any)?.id_demande ?? (initialData as any)?.Id;
+    if (!apiURL || !id) { try { toast.error('API non configurée ou ID manquant'); } catch {} return; }
+    const next = !isSigned;
+    try {
+      await axios.patch(`${apiURL}/api/permis/${encodeURIComponent(String(id))}/signed`, { isSigned: next });
+      setIsSigned(next);
+      try { toast.success(next ? 'Marqué comme signé' : 'Marqué comme non signé'); } catch {}
+    } catch (e) {
+      try { toast.error('Échec de mise à jour is_signed'); } catch {}
+    }
+  }, [apiURL, initialData, isSigned]);
   const [canvasSizes, setCanvasSizes] = useState<{width: number, height: number}[]>([
     {width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height},
     {width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height},
@@ -2910,7 +2944,8 @@ const detailsFontSize = 30;
     if (!stageRef.current) return;
     setIsLoading(true);
     try {
-      const pdf = new jsPDF('p', 'pt', 'a7');
+      // Always generate A4 pages for consistent print sizing
+      const pdf = new jsPDF('p', 'pt', 'a4');
       let a4Width = pdf.internal.pageSize.getWidth();
       let a4Height = pdf.internal.pageSize.getHeight();
       for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
@@ -2936,7 +2971,7 @@ const detailsFontSize = 30;
         stage.scale(prevScale);
         if (pageIndex > 0) {
           const portrait = currentSize.height >= currentSize.width;
-          pdf.addPage('a7', portrait ? 'portrait' : 'landscape');
+          pdf.addPage('a4', portrait ? 'portrait' : 'landscape');
           a4Width = pdf.internal.pageSize.getWidth();
           a4Height = pdf.internal.pageSize.getHeight();
         }
@@ -3490,8 +3525,17 @@ const pageLabel = (idx: number) => {
             <button className={styles.iconBtn} onClick={gotoNext} disabled={!canNext}>
               <FiChevronRight />
             </button>
-        </div>
-        <div className={styles.rightTools}>
+          </div>
+          <div className={styles.rightTools}>
+            <button
+              className={`${styles.actionBtn}`}
+              onClick={toggleSigned}
+              title="Basculer l'état signé du titre"
+              style={{ background: isSigned ? '#16a34a' : undefined }}
+            >
+              <FiCheckCircle />
+              <span>{isSigned ? 'Signed' : 'Mark as Signed'}</span>
+            </button>
             {/* Articles source selection */}
             <div className={styles.templateSection}>
               <select
@@ -3982,7 +4026,7 @@ const pageLabel = (idx: number) => {
                   <input type="number" value={firstSelected.height || 0} onChange={(e) => handlePropertyChange('height', parseFloat(e.target.value || '0'))} />
                 </div>
               </div>
-{firstSelected.type === 'qrcode' && (
+{/* {firstSelected.type === 'qrcode' && (
   <div className={styles.propRow}>
     <label>QR Data</label>
     <textarea 
@@ -3995,15 +4039,15 @@ const pageLabel = (idx: number) => {
       This data will be encoded in the QR code
     </div>
   </div>
-)}
-{firstSelected.type === 'qrcode' && lastQrDebug && (
-  <div className={styles.propRow}>
-    <label>Last QR Debug</label>
-    <pre className={styles.qrDebugBlock}>
-      {JSON.stringify(lastQrDebug, null, 2)}
+)} */}
+{/* {firstSelected.type === 'qrcode' && lastQrDebug && (
+   <div className={styles.propRow}>
+     <label>Last QR Debug</label>
+     <pre className={styles.qrDebugBlock}>
+       {JSON.stringify(lastQrDebug, null, 2)}
     </pre>
-  </div>
-)}
+   </div>
+)} */}
               {firstSelected.type === 'text' && (
                 <>
                   <div className={styles.propRow}>

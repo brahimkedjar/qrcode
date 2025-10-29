@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Post, Body } from '@nestjs/common';
+import { Controller, Get, Param, Query, Post, Body, Patch } from '@nestjs/common';
 import { PermisService } from './permis.service';
 
 @Controller('permis')
@@ -57,5 +57,11 @@ export class PermisController {
   async generateQrForPermis(@Param('id') id: string, @Body() body?: any) {
     const by = body?.by || body?.user || body?.username || '';
     return this.permisService.generateAndSaveQrCode(id, by);
+  }
+
+  @Patch(':id/signed')
+  async setSigned(@Param('id') id: string, @Body() body?: any) {
+    const val = !!(body?.isSigned ?? body?.is_signed ?? body?.value);
+    return this.permisService.setSignedFlag(id, val);
   }
 }
