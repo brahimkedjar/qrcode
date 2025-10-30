@@ -108,6 +108,8 @@
   align-items:center;
   gap:8px;
   margin-left: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .collectionGroup {
@@ -121,10 +123,9 @@
 
 .collectionField {
   display: flex;
-      flex-direction: row;
-      gap: 4px;
-      justify-content: space-around;
-      align-items: center;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
 }
 
 .collectionField label {
@@ -172,6 +173,79 @@
 .collectionSaveBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.optionGroup {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(15,23,36,0.02);
+  border-radius: 8px;
+}
+
+.optionField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.optionField label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+}
+
+.optionField input {
+  min-width: 140px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(15,23,36,0.12);
+  font-size: 12px;
+  background: #fff;
+  color: var(--surface);
+  outline: none;
+  transition: border-color .2s ease;
+}
+
+.optionField input:focus {
+  border-color: var(--accent);
+}
+
+.optionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--accent-2);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.optionBtn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.optionBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.optionStatus {
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(15,23,36,0.05);
+  padding: 6px 10px;
+  border-radius: 6px;
 }
 
 .spinIcon {

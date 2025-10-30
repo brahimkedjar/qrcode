@@ -10,7 +10,10 @@ const DEFAULT_TABLES = {
   coordinates: process.env.ACCESS_TABLE_COORDINATES || 'coordonees',
   types: process.env.ACCESS_TABLE_TYPES || 'TypesTitres',
   detenteur: process.env.ACCESS_TABLE_DETENTEUR || 'Detenteur',
-  statutjuridique: process.env.ACCESS_TABLE_STATUTJURIDIQUE || 'statutjuridique'
+  statutjuridique: process.env.ACCESS_TABLE_STATUTJURIDIQUE || 'statutjuridique',
+  procedures: process.env.ACCESS_TABLE_PROCEDURES || 'Procedures',
+  taxesSup: process.env.ACCESS_TABLE_TAXES_SUP || 'TaxesSup',
+  droitsEtabl: process.env.ACCESS_TABLE_DROITS_ETABL || 'DroitsEtabl'
 };
 
 // Map Access column names to API fields expected by the client
@@ -50,7 +53,36 @@ const DEFAULT_COLUMNS = {
     delaiMaximalDemandeRenouvellement: process.env.ACCESS_COL_TYPES_DELAI_RENOUV || 'DelaiMaximalDemandeRenouvellement',
     validiteMaximaleTotale: process.env.ACCESS_COL_TYPES_VALIDITE_TOTALE || 'ValiditeMaximaleTotale',
     surfaceMaximale: process.env.ACCESS_COL_TYPES_SURFACE_MAX || 'SurfaceMaximale'
+  },
+  procedures: {
+    id: process.env.ACCESS_COL_PROC_ID || 'id',
+    titreId: process.env.ACCESS_COL_PROC_TITRE_ID || 'idTitre',
+    typeId: process.env.ACCESS_COL_PROC_TYPE_ID || 'idTypeTitre',
+    label: process.env.ACCESS_COL_PROC_LABEL || 'Procedure',
+    dateOption: process.env.ACCESS_COL_PROC_DATE_OPTION || 'date_option'
+  },
+  taxesSup: {
+    id: process.env.ACCESS_COL_TAXES_ID || 'id',
+    titreId: process.env.ACCESS_COL_TAXES_TITRE_ID || 'idTitre',
+    numeroPerc: process.env.ACCESS_COL_TAXES_NUMERO_PERC || 'NumeroPerc',
+    par: process.env.ACCESS_COL_TAXES_PAR || 'PAR',
+    date: process.env.ACCESS_COL_TAXES_DATE || 'Date'
+  },
+  droitsEtabl: {
+    id: process.env.ACCESS_COL_DROITS_ID || 'id',
+    titreId: process.env.ACCESS_COL_DROITS_TITRE_ID || 'idTitre',
+    numeroPerc: process.env.ACCESS_COL_DROITS_NUMERO_PERC || 'NumeroPerc'
   }
+};
+
+const TYPE_OPTION_MAP: Record<string, string> = {
+  PPM: 'APM',
+  PEM: 'TEM',
+  PEC: 'TEC',
+  PXM: 'TXM',
+  PXC: 'TXC',
+  ARM: 'AAM',
+  ARC: 'AAC'
 };
 
 @Injectable()
@@ -58,6 +90,11 @@ export class PermisService {
   private readonly logger = new Logger(PermisService.name);
 
   constructor(private readonly access: AccessService) {}
+
+  private quote(name: string): string {
+    if (!name) return '';
+    return name.startsWith('[') ? name : `[${name}]`;
+  }
 
   async getPermisById(id: string) {
     const t = DEFAULT_TABLES.permis;
@@ -210,6 +247,25 @@ export class PermisService {
     val.id_demande = val.id;
     val.taken_date = val.takenDate;
     val.taken_by = val.takenBy;
+    const procTable = DEFAULT_TABLES.procedures;
+    if (procTable) {
+      const pc: any = DEFAULT_COLUMNS.procedures;
+      const dateCol = this.quote(pc.dateOption || 'date_option');
+      const titreCol = this.quote(pc.titreId || 'idTitre');
+      const labelCol = this.quote(pc.label || 'Procedure');
+      const whereId = isNumericId ? id : this.access.escapeValue(id);
+      try {
+        const sqlOpt = `SELECT TOP 1 ${dateCol} AS opt_date FROM ${procTable} WHERE ${titreCol} = ${whereId} AND ${labelCol} LIKE 'Opté%' ORDER BY ${dateCol} DESC`;
+        const optRows = await this.access.query(sqlOpt);
+        if (optRows && optRows.length) {
+          const optDateParsed = parseAccessDate(optRows[0]?.opt_date);
+          if (optDateParsed) {
+            val.optionDate = optDateParsed.toISOString().slice(0, 10);
+            val.date_option = val.optionDate;
+          }
+        }
+      } catch {}
+    }
     if (!val.typePermis || typeof val.typePermis === 'string') {
       val.typePermis = { lib_type: String(r[c.typePermis] ?? ''), duree_initiale: null };
     } else {
@@ -244,7 +300,7 @@ export class PermisService {
   private async ensureColumnExists(table: string, column: string, attempts: string[]) {
     const hasColumn = async () => {
       try {
-        await this.access.query(`SELECT ${column} FROM ${table} WHERE 1 = 0`);
+        await this.access.query(`SELECT ${this.quote(column)} FROM ${table} WHERE 1 = 0`);
         return true;
       } catch {
         return false;
@@ -376,6 +432,33 @@ export class PermisService {
     };
   }
 
+  private async getTypeByCode(code: string) {
+    const normalized = String(code ?? '').trim();
+    if (!normalized) return null;
+    const t = DEFAULT_TABLES.types;
+    const c = DEFAULT_COLUMNS.types as any;
+    const literal = this.access.escapeValue(normalized);
+    const literalUpper = this.access.escapeValue(normalized.toUpperCase());
+    let rows: any[] = [];
+    try { rows = await this.access.query(`SELECT TOP 1 * FROM ${t} WHERE ${c.code} = ${literal}`); } catch {}
+    if (!rows || !rows.length) {
+      try { rows = await this.access.query(`SELECT TOP 1 * FROM ${t} WHERE UCase(${c.code}) = ${literalUpper}`); } catch {}
+    }
+    if (!rows || !rows.length) return null;
+    const r = rows[0] as any;
+    return {
+      id: r[c.id],
+      nom: r[c.nom],
+      code: r[c.code],
+      validiteMaximale: r[c.validiteMaximale],
+      renouvellementsPossibles: r[c.renouvellementsPossibles],
+      validiteRenouvellement: r[c.validiteRenouvellement],
+      delaiMaximalDemandeRenouvellement: r[c.delaiMaximalDemandeRenouvellement],
+      validiteMaximaleTotale: r[c.validiteMaximaleTotale],
+      surfaceMaximale: r[c.surfaceMaximale]
+    };
+  }
+
   private async getDetenteurById(detId: any) {
     if (detId == null || detId === '') return null;
     const t = DEFAULT_TABLES.detenteur;
@@ -478,6 +561,110 @@ export class PermisService {
     return `#${year}-${month}-${day}#`;
   }
 
+  private extractYear(input: any): number | null {
+    if (input == null || input === '') return null;
+    if (input instanceof Date && !isNaN(+input)) {
+      return input.getFullYear();
+    }
+    const s = String(input).trim();
+    if (!s) return null;
+    const iso = s.match(/^(\d{4})[-\/]/);
+    if (iso) return Number(iso[1]) || null;
+    const fr = s.match(/[-\/](\d{4})$/);
+    if (fr) return Number(fr[1]) || null;
+    const any = s.match(/(\d{4})(?!.*\d)/);
+    if (any) return Number(any[1]) || null;
+    const d = new Date(s);
+    return isNaN(+d) ? null : d.getFullYear();
+  }
+
+  private async updateTaxesSupForOption(titreId: string, oldCode: string, newCode: string, newTypeName: string, optionYear: number | null) {
+    const table = DEFAULT_TABLES.taxesSup;
+    if (!table) return;
+    const cols: any = DEFAULT_COLUMNS.taxesSup;
+    const idCol = this.quote(cols.id || 'id');
+    const titreCol = this.quote(cols.titreId || 'idTitre');
+    const numeroCol = this.quote(cols.numeroPerc || 'NumeroPerc');
+    const parCol = this.quote(cols.par || 'PAR');
+    const dateCol = cols.date ? this.quote(cols.date) : null;
+    const isNumericTitre = /^\d+$/.test(String(titreId));
+    const titreLiteral = isNumericTitre ? String(titreId) : this.access.escapeValue(String(titreId));
+    const selectSql = `SELECT ${idCol} AS rec_id, ${numeroCol} AS rec_numero, ${parCol} AS rec_par${dateCol ? `, ${dateCol} AS rec_date` : ''} FROM ${table} WHERE ${titreCol} = ${titreLiteral}`;
+    let rows: any[] = [];
+    try {
+      rows = await this.access.query(selectSql);
+    } catch (err) {
+      try { this.logger.warn(`[updateTaxesSupForOption] select failed: ${(err as any)?.message || err}`); } catch {}
+      return;
+    }
+    const upperOld = (oldCode || '').toUpperCase();
+    const replacement = newCode || '';
+    const normalizedName = String(newTypeName ?? '').trim();
+    for (const row of rows) {
+      const recordId = row.rec_id;
+      const recordIdLiteral = typeof recordId === 'number' ? String(recordId) : this.access.escapeValue(String(recordId));
+      const numeroRaw = row.rec_numero ?? '';
+      const numeroStr = String(numeroRaw || '');
+      if (!numeroStr || !numeroStr.toUpperCase().includes(upperOld)) continue;
+      let recordYear = this.extractYear(row.rec_date);
+      if (recordYear == null) recordYear = this.extractYear(numeroStr);
+      if (optionYear != null && recordYear != null && recordYear < optionYear) continue;
+      const replaced = numeroStr.replace(new RegExp(oldCode, 'gi'), replacement);
+      const sets: string[] = [];
+      if (replaced !== numeroStr) {
+        sets.push(`${numeroCol} = ${this.access.escapeValue(replaced)}`);
+      }
+      if (normalizedName && String(row.rec_par || '').trim() !== normalizedName) {
+        sets.push(`${parCol} = ${this.access.escapeValue(normalizedName)}`);
+      }
+      if (!sets.length) continue;
+      const updateSql = `UPDATE ${table} SET ${sets.join(', ')} WHERE ${idCol} = ${recordIdLiteral}`;
+      try {
+        await this.access.query(updateSql);
+      } catch (err) {
+        try { this.logger.warn(`[updateTaxesSupForOption] update failed: ${(err as any)?.message || err}`); } catch {}
+      }
+    }
+  }
+
+  private async updateDroitsEtablForOption(titreId: string, oldCode: string, newCode: string, optionYear: number | null) {
+    const table = DEFAULT_TABLES.droitsEtabl;
+    if (!table) return;
+    const cols: any = DEFAULT_COLUMNS.droitsEtabl;
+    const idCol = this.quote(cols.id || 'id');
+    const titreCol = this.quote(cols.titreId || 'idTitre');
+    const numeroCol = this.quote(cols.numeroPerc || 'NumeroPerc');
+    const isNumericTitre = /^\d+$/.test(String(titreId));
+    const titreLiteral = isNumericTitre ? String(titreId) : this.access.escapeValue(String(titreId));
+    const selectSql = `SELECT ${idCol} AS rec_id, ${numeroCol} AS rec_numero FROM ${table} WHERE ${titreCol} = ${titreLiteral}`;
+    let rows: any[] = [];
+    try {
+      rows = await this.access.query(selectSql);
+    } catch (err) {
+      try { this.logger.warn(`[updateDroitsEtablForOption] select failed: ${(err as any)?.message || err}`); } catch {}
+      return;
+    }
+    const replacement = newCode || '';
+    const upperOld = (oldCode || '').toUpperCase();
+    for (const row of rows) {
+      const numeroRaw = row.rec_numero ?? '';
+      const numeroStr = String(numeroRaw || '');
+      if (!numeroStr || !numeroStr.toUpperCase().includes(upperOld)) continue;
+      let recordYear = this.extractYear(numeroStr);
+      if (optionYear != null && recordYear != null && recordYear < optionYear) continue;
+      const replaced = numeroStr.replace(new RegExp(oldCode, 'gi'), replacement);
+      if (replaced === numeroStr) continue;
+      const recordId = row.rec_id;
+      const recordIdLiteral = typeof recordId === 'number' ? String(recordId) : this.access.escapeValue(String(recordId));
+      const updateSql = `UPDATE ${table} SET ${numeroCol} = ${this.access.escapeValue(replaced)} WHERE ${idCol} = ${recordIdLiteral}`;
+      try {
+        await this.access.query(updateSql);
+      } catch (err) {
+        try { this.logger.warn(`[updateDroitsEtablForOption] update failed: ${(err as any)?.message || err}`); } catch {}
+      }
+    }
+  }
+
   async setSignedFlag(id: string, value: boolean) {
     await this.ensureSignedColumn();
     const t: any = (DEFAULT_TABLES as any).permis;
@@ -528,6 +715,85 @@ export class PermisService {
       ok: true,
       takenDate: isoDate,
       takenBy: nameVal
+    };
+  }
+
+  async optPermisType(id: string, optionDate?: any) {
+    const t = DEFAULT_TABLES.permis;
+    const c = DEFAULT_COLUMNS.permis;
+    const isNumericId = /^\d+$/.test(String(id));
+    const whereId = isNumericId ? String(id) : this.access.escapeValue(String(id));
+    const rows = await this.access.query(`SELECT * FROM ${t} WHERE ${c.id} = ${whereId}`);
+    if (!rows.length) {
+      throw new Error('Permis introuvable');
+    }
+    const permit = rows[0] as any;
+    const currentTypeId = permit[c.typePermis];
+    const currentType = await this.getTypeById(currentTypeId);
+    if (!currentType || !currentType.code) {
+      throw new Error('Type actuel introuvable');
+    }
+    const sourceCode = String(currentType.code).trim().toUpperCase();
+    const targetCode = TYPE_OPTION_MAP[sourceCode];
+    if (!targetCode) {
+      throw new Error(`Aucun type cible configuré pour ${sourceCode}`);
+    }
+    const targetType = await this.getTypeByCode(targetCode);
+    if (!targetType || targetType.id == null) {
+      throw new Error(`Type cible ${targetCode} introuvable`);
+    }
+
+    const typeLiteral = /^\d+$/.test(String(targetType.id)) ? String(targetType.id) : this.access.escapeValue(String(targetType.id));
+    await this.access.query(`UPDATE ${t} SET ${c.typePermis} = ${typeLiteral} WHERE ${c.id} = ${whereId}`);
+
+    const proceduresTable = DEFAULT_TABLES.procedures;
+    const optionLiteral = this.formatAccessDateLiteral(optionDate) || this.formatAccessDateLiteral(new Date());
+    const optionYear = this.extractYear(optionDate) ?? new Date().getFullYear();
+
+    if (proceduresTable) {
+      const pc: any = DEFAULT_COLUMNS.procedures;
+      const titreCol = this.quote(pc.titreId || 'idTitre');
+      const typeCol = this.quote(pc.typeId || 'idTypeTitre');
+      const labelCol = this.quote(pc.label || 'Procedure');
+      const dateColName = pc.dateOption || 'date_option';
+      await this.ensureColumnExists(proceduresTable, dateColName, [
+        `ALTER TABLE ${proceduresTable} ADD COLUMN ${dateColName} DATETIME`,
+        `ALTER TABLE ${proceduresTable} ADD COLUMN ${dateColName} DATE`,
+        `ALTER TABLE ${proceduresTable} ADD COLUMN ${dateColName} TEXT(50)`
+      ]);
+      const dateCol = this.quote(dateColName);
+      const label = `Opté en titre (${targetCode})`;
+      const columns = [titreCol, typeCol, labelCol, dateCol];
+      const values = [
+        whereId,
+        typeLiteral,
+        this.access.escapeValue(label),
+        optionLiteral ?? 'NULL'
+      ];
+      const insertSql = `INSERT INTO ${proceduresTable} (${columns.join(', ')}) VALUES (${values.join(', ')})`;
+      try {
+        await this.access.query(insertSql);
+      } catch (err) {
+        try { this.logger.warn(`[optPermisType] insertion procédure échouée: ${(err as any)?.message || err}`); } catch {}
+      }
+    }
+
+    try {
+      await this.updateTaxesSupForOption(String(id), sourceCode, targetType.code || targetCode, targetType.nom || targetType.code || targetCode, optionYear);
+    } catch (err) {
+      try { this.logger.warn(`[optPermisType] update TaxesSup warning: ${(err as any)?.message || err}`); } catch {}
+    }
+    try {
+      await this.updateDroitsEtablForOption(String(id), sourceCode, targetType.code || targetCode, optionYear);
+    } catch (err) {
+      try { this.logger.warn(`[optPermisType] update DroitsEtabl warning: ${(err as any)?.message || err}`); } catch {}
+    }
+
+    return {
+      ok: true,
+      optionDate: optionLiteral ? optionLiteral.replace(/#/g, '') : null,
+      oldType: { id: currentType.id, code: sourceCode, nom: currentType.nom },
+      newType: { id: targetType.id, code: targetType.code, nom: targetType.nom }
     };
   }
 

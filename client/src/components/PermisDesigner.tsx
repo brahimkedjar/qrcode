@@ -5,7 +5,8 @@ import {
   FiDownload, FiSave, FiEdit2, FiMove, FiType,
   FiTrash2, FiCopy, FiLayers, FiChevronLeft, FiChevronRight, FiGrid,
   FiChevronUp, FiChevronDown, FiRefreshCw, FiCheckCircle, FiAlertCircle,
-  FiUpload, FiRotateCcw, FiRotateCw
+  FiUpload, FiRotateCcw, FiRotateCw,
+  FiArrowRight
 } from 'react-icons/fi';
 import { BsTextParagraph, BsImage, BsBorderWidth } from 'react-icons/bs';
 import axios from 'axios';
@@ -191,7 +192,7 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
       (initialData as any)?.dateRemiseTitre
     )
   );
-  const [takenBy, setTakenBy] = useState<string>(() => {
+  const [takenBy, setTakenBy] = useState<string>(() => { 
     const raw =
       (initialData as any)?.takenBy ??
       (initialData as any)?.taken_by ??
@@ -200,6 +201,15 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
     return raw == null ? '' : String(raw);
   });
   const [collectionSaving, setCollectionSaving] = useState(false);
+  const [optionDate, setOptionDate] = useState<string>(() =>
+    normalizeDateInput(
+      (initialData as any)?.optionDate ??
+      (initialData as any)?.date_option ??
+      new Date()
+    )
+  );
+  const [isOpting, setIsOpting] = useState(false);
+  const [optResult, setOptResult] = useState<{ code?: string; name?: string } | null>(null);
   useEffect(() => {
     try {
       const v = (initialData as any)?.is_signed ?? (initialData as any)?.isSigned;
@@ -226,6 +236,15 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
       (initialData as any)?.nomRemiseTitre ??
       '';
     setTakenBy(raw == null ? '' : String(raw));
+    setOptionDate(
+      normalizeDateInput(
+        (initialData as any)?.optionDate ??
+        (initialData as any)?.date_option ??
+        new Date()
+      )
+    );
+    setIsOpting(false);
+    setOptResult(null);
   }, [initialData]);
 
   const toggleSigned = useCallback(async () => {
@@ -280,6 +299,43 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
       setCollectionSaving(false);
     }
   }, [apiURL, initialData, takenDate, takenBy]);
+  const handleOptToTitre = useCallback(async () => {
+    const id =
+      (initialData as any)?.id ??
+      (initialData as any)?.id_demande ??
+      (initialData as any)?.Id;
+    if (!id) {
+      try { toast.error('ID manquant pour la procédure'); } catch {}
+      return;
+    }
+    if (!optionDate) {
+      try { toast.error('Veuillez sélectionner la date d’option'); } catch {}
+      return;
+    }
+    if (typeof window !== 'undefined' && !window.confirm('Confirmer l’option du permis vers le nouveau type ?')) {
+      return;
+    }
+    const base = apiURL && apiURL.trim().length > 0
+      ? apiURL.replace(/\/+$/, '')
+      : '';
+    const url = `${base}/api/permis/${encodeURIComponent(String(id))}/opt`;
+    setIsOpting(true);
+    try {
+      const res = await axios.patch(url, { optionDate });
+      const data = res?.data ?? {};
+      if (data?.optionDate) {
+        setOptionDate(normalizeDateInput(data.optionDate));
+      }
+      if (data?.newType) {
+        setOptResult({ code: data.newType.code, name: data.newType.nom });
+      }
+      try { toast.success('Type de permis mis à jour'); } catch {}
+    } catch (e) {
+      try { toast.error('Échec de l’opération opté à titre'); } catch {}
+    } finally {
+      setIsOpting(false);
+    }
+  }, [apiURL, initialData, optionDate]);
   const [canvasSizes, setCanvasSizes] = useState<{width: number, height: number}[]>([
     {width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height},
     {width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height},
@@ -3619,7 +3675,9 @@ const pageLabel = (idx: number) => {
               <FiChevronRight />
             </button>
           </div>
-          <div className={styles.collectionField}>
+          <div className={styles.rightTools}>
+            <div className={styles.collectionGroup}>
+              <div className={styles.collectionField}>
                 <label htmlFor="takenDateInput">Date retrait</label>
                 <input
                   id="takenDateInput"
@@ -3646,9 +3704,32 @@ const pageLabel = (idx: number) => {
               >
                 {collectionSaving ? <FiRefreshCw className={styles.spinIcon} /> : <FiSave />}
               </button>
-          <div className={styles.rightTools}>
-            <div className={styles.collectionGroup}>
-            
+            </div>
+            <div className={styles.optionGroup}>
+              <div className={styles.optionField}>
+                <label htmlFor="optionDateInput">Date option</label>
+                <input
+                  id="optionDateInput"
+                  type="date"
+                  value={optionDate}
+                  onChange={(e) => setOptionDate(e.target.value)}
+                />
+              </div>
+              <button
+                className={styles.optionBtn}
+                onClick={handleOptToTitre}
+                disabled={isOpting}
+                title="Opter le permis vers le nouveau type"
+              >
+                {isOpting ? <FiRefreshCw className={styles.spinIcon} /> : <FiArrowRight />}
+                <span>Opté à titre</span>
+              </button>
+              {optResult && (
+                <div className={styles.optionStatus}>
+                  Nouveau type&nbsp;: <strong>{optResult.code}</strong>
+                  {optResult.name ? ` (${optResult.name})` : ''}
+                </div>
+              )}
             </div>
             <button
               className={`${styles.actionBtn}`}

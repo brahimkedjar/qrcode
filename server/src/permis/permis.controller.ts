@@ -69,4 +69,9 @@ export class PermisController {
   async setCollectionInfo(@Param('id') id: string, @Body() body?: any) {
     return this.permisService.setCollectionInfo(id, body ?? {});
   }
+
+  @Patch(':id/opt')
+  async optPermis(@Param('id') id: string, @Body() body?: any) {
+    return this.permisService.optPermisType(id, body?.optionDate ?? body?.date_option ?? body?.date);
+  }
 }
