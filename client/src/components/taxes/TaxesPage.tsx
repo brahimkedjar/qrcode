@@ -62,26 +62,47 @@ export default function TaxesPage() {
 
   const search = async () => {
     setErr(null);
-    if (!/^\d+$/.test(idTitre.trim())) {
-      setErr("Veuillez saisir un identifiant de titre (chiffres).");
+    const rawInput = idTitre.trim();
+    if (!rawInput) {
+      setErr("Veuillez saisir un identifiant ou un code de titre.");
       setTaxes([]);
       setDeas([]);
+      setPermisInfo(null);
       return;
     }
     setLoading(true);
     try {
+      let resolvedId = rawInput;
+      let resolvedPermis: any | null = null;
+      const isNumeric = /^\d+$/.test(rawInput);
+      if (!isNumeric) {
+        const searchResp = await axios.get(`${API_URL}/api/permis/search`, { params: { q: rawInput } });
+        const data = searchResp?.data;
+        if (!data || data.exists === false) {
+          throw new Error('Titre introuvable');
+        }
+        const candidateId = data?.id ?? data?.permisId ?? data?.permis?.id;
+        if (!candidateId || !/^\d+$/.test(String(candidateId))) {
+          throw new Error('Titre introuvable');
+        }
+        resolvedId = String(candidateId);
+        resolvedPermis = data?.permis ?? data;
+        setIdTitre(resolvedId);
+      }
       const [ts, da, pm] = await Promise.all([
-        axios.get(`${API_URL}/api/finance/taxes-sup`, { params: { idTitre: idTitre.trim() } }),
-        axios.get(`${API_URL}/api/finance/dea`, { params: { idTitre: idTitre.trim() } }),
-        axios.get(`${API_URL}/api/permis/${encodeURIComponent(idTitre.trim())}`)
+        axios.get(`${API_URL}/api/finance/taxes-sup`, { params: { idTitre: resolvedId } }),
+        axios.get(`${API_URL}/api/finance/dea`, { params: { idTitre: resolvedId } }),
+        axios.get(`${API_URL}/api/permis/${encodeURIComponent(resolvedId)}`).catch(() => ({ data: null }))
       ]);
       setTaxes((ts.data?.rows || []) as TaxeSupRow[]);
       setDeas((da.data?.rows || []) as DeaRow[]);
-      setPermisInfo(pm.data || null);
+      const permisData = pm?.data && Object.keys(pm.data || {}).length ? pm.data : resolvedPermis;
+      setPermisInfo(permisData || null);
       setSelectedTs({});
       setSelectedDea({});
     } catch (e: any) {
-      setErr(e?.message || 'Echec du chargement.');
+      console.error('[Taxes] search failed', e);
+      setErr(e?.response?.data?.message || e?.message || 'Echec du chargement.');
       setTaxes([]);
       setDeas([]);
       setPermisInfo(null);
@@ -270,8 +291,7 @@ export default function TaxesPage() {
           <input
             className={styles.input}
             type="text"
-            inputMode="numeric"
-            placeholder="Rechercher par idTitre (ex: 21)"
+            placeholder="Rechercher par idTitre ou code (ex: 21 ou TEC 8375)"
             value={idTitre}
             onChange={(e) => setIdTitre(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') search(); }}

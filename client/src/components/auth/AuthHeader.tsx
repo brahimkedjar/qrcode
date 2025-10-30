@@ -6,9 +6,10 @@ type Props = {
   onLogout: () => void;
   view?: 'designer' | 'verify' | 'pdfs' | 'taxes';
   onChangeView?: (v: 'designer' | 'verify' | 'pdfs' | 'taxes') => void;
+  canAccessTaxes?: boolean;
 };
 
-export default function AuthHeader({ userName, onLogout, view = 'designer', onChangeView }: Props) {
+export default function AuthHeader({ userName, onLogout, view = 'designer', onChangeView, canAccessTaxes = false }: Props) {
   return (
     <div className={styles.bar}>
       <div className={styles.brand}>
@@ -21,7 +22,9 @@ export default function AuthHeader({ userName, onLogout, view = 'designer', onCh
             <button className={`${styles.tab} ${view === 'designer' ? styles.tabActive : ''}`} onClick={() => onChangeView('designer')}>Designer</button>
             <button className={`${styles.tab} ${view === 'verify' ? styles.tabActive : ''}`} onClick={() => onChangeView('verify')}>Vérifier QR</button>
             <button className={`${styles.tab} ${view === 'pdfs' ? styles.tabActive : ''}`} onClick={() => onChangeView('pdfs')}>PDFs</button>
-            <button className={`${styles.tab} ${view === 'taxes' ? styles.tabActive : ''}`} onClick={() => onChangeView('taxes')}>Taxes</button>
+            {canAccessTaxes && (
+              <button className={`${styles.tab} ${view === 'taxes' ? styles.tabActive : ''}`} onClick={() => onChangeView('taxes')}>Taxes</button>
+            )}
           </div>
         )}
         <div className={styles.user}>{userName}</div>

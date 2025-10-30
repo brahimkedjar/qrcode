@@ -27,7 +27,10 @@ const DEFAULT_COLUMNS = {
     dateCreation: process.env.ACCESS_COL_DATE || 'DateDemande',
     // Added for duration calculation
     dateDebut: process.env.ACCESS_COL_DATE_DEBUT || 'DateOctroi',
-    dateFin: process.env.ACCESS_COL_DATE_FIN || 'DateExpiration'
+    dateFin: process.env.ACCESS_COL_DATE_FIN || 'DateExpiration',
+    signed: process.env.ACCESS_COL_PERMIS_SIGNED || 'is_signed',
+    takenDate: process.env.ACCESS_COL_PERMIS_TAKEN_DATE || 'date_remise_titre',
+    takenBy: process.env.ACCESS_COL_PERMIS_TAKEN_BY || 'nom_remise_titre'
   },
   coordinates: {
     permisId: process.env.ACCESS_COL_COORD_PERMIS_ID || 'idTitre',
@@ -160,6 +163,10 @@ export class PermisService {
     const dairaVal = toStr((r as any).Daira ?? (r as any)['DaÃƒÂ¯ra'] ?? (r as any).daira ?? '');
     const lieuditVal = toStr((r as any).LieuDit ?? (r as any).lieudit ?? '');
 
+    const signedCol = c.signed || 'is_signed';
+    const takenDateCol = c.takenDate || 'date_remise_titre';
+    const takenByCol = c.takenBy || 'nom_remise_titre';
+
     const val: any = {
       id: r[c.id],
       typePermis: typeData || toStr(r[c.typePermis]),
@@ -185,16 +192,24 @@ export class PermisService {
       daira: dairaVal,
       lieudit: lieuditVal,
       is_signed: (() => {
-        const v = (r as any).is_signed;
+        const v = (r as any)[signedCol];
         if (v === true) return true;
         if (v === false) return false;
         const s = String(v ?? '').trim().toLowerCase();
         return s === 'true' || s === 'yes' || s === '-1' || s === '1';
-      })()
+      })(),
+      takenDate: (() => {
+        const raw = (r as any)[takenDateCol];
+        const parsed = parseAccessDate(raw);
+        return parsed ? parsed.toISOString().slice(0, 10) : '';
+      })(),
+      takenBy: toStr((r as any)[takenByCol])
     };
     // Add compatibility fields expected by designer
     val.code_demande = val.codeDemande;
     val.id_demande = val.id;
+    val.taken_date = val.takenDate;
+    val.taken_by = val.takenBy;
     if (!val.typePermis || typeof val.typePermis === 'string') {
       val.typePermis = { lib_type: String(r[c.typePermis] ?? ''), duree_initiale: null };
     } else {
@@ -224,6 +239,32 @@ export class PermisService {
       return isNaN(n) ? 0 : n;
     };
     return rows.map((r: any) => ({ x: parseFr(r.cx ?? r[c.x] ?? r.x), y: parseFr(r.cy ?? r[c.y] ?? r.y), order: Number(r.coord_id || r[c.id] || 0), zone: r.zone }));
+  }
+
+  private async ensureColumnExists(table: string, column: string, attempts: string[]) {
+    const hasColumn = async () => {
+      try {
+        await this.access.query(`SELECT ${column} FROM ${table} WHERE 1 = 0`);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    if (await hasColumn()) return;
+
+    for (const sql of attempts) {
+      try {
+        await this.access.query(sql);
+        break;
+      } catch (err) {
+        try { this.logger.warn(`[ensureColumnExists] attempt failed (${sql}): ${(err as any)?.message || err}`); } catch {}
+      }
+    }
+
+    if (!(await hasColumn())) {
+      throw new Error(`Unable to add column ${column} to table ${table}`);
+    }
   }
 
   async runRaw(sql: string) {
@@ -375,9 +416,66 @@ export class PermisService {
 
   private async ensureSignedColumn() {
     const t = (DEFAULT_TABLES as any).permis;
-    const tryAlter = async (sql: string) => { try { await this.access.query(sql); } catch {} };
-    await tryAlter(`ALTER TABLE ${t} ADD COLUMN is_signed YESNO`);
-    await tryAlter(`ALTER TABLE ${t} ADD COLUMN is_signed BIT`);
+    const c: any = DEFAULT_COLUMNS.permis;
+    const column = c.signed || 'is_signed';
+    await this.ensureColumnExists(t, column, [
+      `ALTER TABLE ${t} ADD COLUMN ${column} YESNO`,
+      `ALTER TABLE ${t} ADD COLUMN ${column} BIT`,
+      `ALTER TABLE ${t} ADD COLUMN ${column} BOOLEAN`,
+      `ALTER TABLE ${t} ADD COLUMN ${column} INTEGER DEFAULT 0`,
+      `ALTER TABLE ${t} ADD COLUMN ${column} BYTE DEFAULT 0`
+    ]);
+
+    try {
+      await this.access.query(`UPDATE ${t} SET ${column} = 0 WHERE ${column} IS NULL`);
+    } catch {}
+  }
+
+  private async ensureCollectionColumns() {
+    const t = (DEFAULT_TABLES as any).permis;
+    const c: any = DEFAULT_COLUMNS.permis;
+    const dateCol = c.takenDate || 'date_remise_titre';
+    const nameCol = c.takenBy || 'nom_remise_titre';
+
+    await this.ensureColumnExists(t, dateCol, [
+      `ALTER TABLE ${t} ADD COLUMN ${dateCol} DATETIME`,
+      `ALTER TABLE ${t} ADD COLUMN ${dateCol} DATE`,
+      `ALTER TABLE ${t} ADD COLUMN ${dateCol} TEXT(50)`
+    ]);
+
+    await this.ensureColumnExists(t, nameCol, [
+      `ALTER TABLE ${t} ADD COLUMN ${nameCol} TEXT(100)`,
+      `ALTER TABLE ${t} ADD COLUMN ${nameCol} VARCHAR(100)`,
+      `ALTER TABLE ${t} ADD COLUMN ${nameCol} CHAR(100)`
+    ]);
+  }
+
+  private formatAccessDateLiteral(input: any): string | null {
+    if (input == null || input === '') return null;
+    const parseInput = (val: any): Date | null => {
+      if (val instanceof Date && !isNaN(+val)) return val;
+      const s = String(val).trim();
+      if (!s) return null;
+      const iso = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+      if (iso) {
+        const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+        return isNaN(+d) ? null : d;
+      }
+      const fr = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (fr) {
+        const d = new Date(Number(fr[3]), Number(fr[2]) - 1, Number(fr[1]));
+        return isNaN(+d) ? null : d;
+      }
+      const d = new Date(s);
+      return isNaN(+d) ? null : d;
+    };
+
+    const date = parseInput(input);
+    if (!date) return null;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `#${year}-${month}-${day}#`;
   }
 
   async setSignedFlag(id: string, value: boolean) {
@@ -386,9 +484,51 @@ export class PermisService {
     const c: any = (DEFAULT_COLUMNS as any).permis;
     const isNumericId = /^\d+$/.test(String(id));
     const lit = value ? 1 : 0;
-    const sql = `UPDATE ${t} SET is_signed = ${lit} WHERE ${c.id} = ${isNumericId ? id : this.access.escapeValue(String(id))}`;
-    await this.access.query(sql);
+    const signedCol = c.signed || 'is_signed';
+    const sql = `UPDATE ${t} SET ${signedCol} = ${lit} WHERE ${c.id} = ${isNumericId ? id : this.access.escapeValue(String(id))}`;
+    try {
+      await this.access.query(sql);
+    } catch (err) {
+      const message = (err as any)?.message ? String((err as any).message) : '';
+      if (message && new RegExp(signedCol, 'i').test(message)) {
+        await this.ensureSignedColumn();
+        await this.access.query(sql);
+      } else {
+        throw err;
+      }
+    }
     return { ok: true, is_signed: !!value };
+  }
+
+  async setCollectionInfo(id: string, payload: any) {
+    await this.ensureCollectionColumns();
+    const t: any = (DEFAULT_TABLES as any).permis;
+    const c: any = (DEFAULT_COLUMNS as any).permis;
+    const dateCol = c.takenDate || 'date_remise_titre';
+    const nameCol = c.takenBy || 'nom_remise_titre';
+    const isNumericId = /^\d+$/.test(String(id));
+
+    const takenDateRaw = payload?.takenDate ?? payload?.date ?? payload?.dateTaken ?? payload?.taken_date ?? null;
+    const takenByRaw = payload?.takenBy ?? payload?.name ?? payload?.taken_by ?? payload?.recipient ?? null;
+
+    const assignments: string[] = [];
+    const dateLiteral = this.formatAccessDateLiteral(takenDateRaw);
+    assignments.push(dateLiteral ? `${dateCol} = ${dateLiteral}` : `${dateCol} = NULL`);
+
+    const nameVal = String(takenByRaw ?? '').trim();
+    assignments.push(nameVal ? `${nameCol} = ${this.access.escapeValue(nameVal)}` : `${nameCol} = NULL`);
+
+    const whereId = isNumericId ? id : this.access.escapeValue(String(id));
+    const sql = `UPDATE ${t} SET ${assignments.join(', ')} WHERE ${c.id} = ${whereId}`;
+    await this.access.query(sql);
+    const isoMatch = dateLiteral?.match(/#(\d{4})-(\d{2})-(\d{2})#/);
+    const isoDate = isoMatch ? `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}` : null;
+
+    return {
+      ok: true,
+      takenDate: isoDate,
+      takenBy: nameVal
+    };
   }
 
   private loadWilayaCodeMap(): Record<string, string> {

@@ -153,6 +153,28 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
     } catch { return 'high'; }
   });
   const apiURL = process.env.NEXT_PUBLIC_API_URL;
+  const normalizeDateInput = (val: any): string => {
+    if (val == null || val === '') return '';
+    if (val instanceof Date && !isNaN(val.getTime())) {
+      return val.toISOString().slice(0, 10);
+    }
+    const s = String(val).trim();
+    if (!s) return '';
+    let match = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    if (match) {
+      const [, yy, mm, dd] = match;
+      const date = new Date(Number(yy), Number(mm) - 1, Number(dd));
+      return isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+    }
+    match = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (match) {
+      const [, dd, mm, yy] = match;
+      const date = new Date(Number(yy), Number(mm) - 1, Number(dd));
+      return isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+    }
+    const date = new Date(s);
+    return isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+  };
   const [isSigned, setIsSigned] = useState<boolean>(() => {
     try {
       const v = (initialData as any)?.is_signed ?? (initialData as any)?.isSigned;
@@ -162,6 +184,22 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
       return s === 'true' || s === 'yes' || s === '1' || s === '-1';
     } catch { return false; }
   });
+  const [takenDate, setTakenDate] = useState<string>(() =>
+    normalizeDateInput(
+      (initialData as any)?.takenDate ??
+      (initialData as any)?.taken_date ??
+      (initialData as any)?.dateRemiseTitre
+    )
+  );
+  const [takenBy, setTakenBy] = useState<string>(() => {
+    const raw =
+      (initialData as any)?.takenBy ??
+      (initialData as any)?.taken_by ??
+      (initialData as any)?.nomRemiseTitre ??
+      '';
+    return raw == null ? '' : String(raw);
+  });
+  const [collectionSaving, setCollectionSaving] = useState(false);
   useEffect(() => {
     try {
       const v = (initialData as any)?.is_signed ?? (initialData as any)?.isSigned;
@@ -174,19 +212,74 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
       }
     } catch {}
   }, [initialData]);
+  useEffect(() => {
+    setTakenDate(
+      normalizeDateInput(
+        (initialData as any)?.takenDate ??
+        (initialData as any)?.taken_date ??
+        (initialData as any)?.dateRemiseTitre
+      )
+    );
+    const raw =
+      (initialData as any)?.takenBy ??
+      (initialData as any)?.taken_by ??
+      (initialData as any)?.nomRemiseTitre ??
+      '';
+    setTakenBy(raw == null ? '' : String(raw));
+  }, [initialData]);
 
   const toggleSigned = useCallback(async () => {
-    const id = (initialData as any)?.id ?? (initialData as any)?.id_demande ?? (initialData as any)?.Id;
-    if (!apiURL || !id) { try { toast.error('API non configurée ou ID manquant'); } catch {} return; }
+    const id =
+      (initialData as any)?.id ??
+      (initialData as any)?.id_demande ??
+      (initialData as any)?.Id;
+    if (!id) {
+      try { toast.error('ID manquant pour la mise à jour'); } catch {}
+      return;
+    }
+
     const next = !isSigned;
+    const base = apiURL && apiURL.trim().length > 0
+      ? apiURL.replace(/\/+$/, '')
+      : '';
+    const url = `${base}/api/permis/${encodeURIComponent(String(id))}/signed`;
+
     try {
-      await axios.patch(`${apiURL}/api/permis/${encodeURIComponent(String(id))}/signed`, { isSigned: next });
+      await axios.patch(url, { isSigned: next });
       setIsSigned(next);
       try { toast.success(next ? 'Marqué comme signé' : 'Marqué comme non signé'); } catch {}
     } catch (e) {
       try { toast.error('Échec de mise à jour is_signed'); } catch {}
     }
   }, [apiURL, initialData, isSigned]);
+
+  const saveCollectionInfo = useCallback(async () => {
+    const id =
+      (initialData as any)?.id ??
+      (initialData as any)?.id_demande ??
+      (initialData as any)?.Id;
+    if (!id) {
+      try { toast.error('ID manquant pour la mise à jour'); } catch {}
+      return;
+    }
+    const base = apiURL && apiURL.trim().length > 0
+      ? apiURL.replace(/\/+$/, '')
+      : '';
+    const url = `${base}/api/permis/${encodeURIComponent(String(id))}/collection`;
+    const payload = {
+      takenDate: takenDate || null,
+      takenBy: takenBy?.trim() || ''
+    };
+    setCollectionSaving(true);
+    try {
+      await axios.patch(url, payload);
+      try { toast.success('Informations de remise enregistrées'); } catch {}
+    } catch (e) {
+      try { toast.error('Échec de mise à jour des informations de remise'); } catch {}
+    } finally {
+      setCollectionSaving(false);
+    }
+  }, [apiURL, initialData, takenDate, takenBy]);
   const [canvasSizes, setCanvasSizes] = useState<{width: number, height: number}[]>([
     {width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height},
     {width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height},
@@ -1882,7 +1975,7 @@ const detailsFontSize = 30;
       const blockW = baseColWidths.reduce((a, b) => a + b, 0);
       const tableWAvail = DEFAULT_CANVAS.width - 80;
       const tableW = Math.min(tableWAvail, blockW * Math.max(blockCols, 2));
-      const headerY = y + 40;
+      const headerY = y ;
       const tableH = headerH + rowH * (rowsPerColExact + 1);
       const marginLeft = PAGE_MARGINS.left ?? 0;
       const marginRight = PAGE_MARGINS.right ?? 0;
@@ -3526,7 +3619,37 @@ const pageLabel = (idx: number) => {
               <FiChevronRight />
             </button>
           </div>
+          <div className={styles.collectionField}>
+                <label htmlFor="takenDateInput">Date retrait</label>
+                <input
+                  id="takenDateInput"
+                  type="date"
+                  value={takenDate}
+                  onChange={(e) => setTakenDate(e.target.value)}
+                />
+              </div>
+              <div className={styles.collectionField}>
+                <label htmlFor="takenByInput">Remis à</label>
+                <input
+                  id="takenByInput"
+                  type="text"
+                  value={takenBy}
+                  onChange={(e) => setTakenBy(e.target.value)}
+                  placeholder="Nom du receveur"
+                />
+              </div>
+              <button
+                className={styles.collectionSaveBtn}
+                onClick={saveCollectionInfo}
+                disabled={collectionSaving}
+                title="Enregistrer les informations de remise"
+              >
+                {collectionSaving ? <FiRefreshCw className={styles.spinIcon} /> : <FiSave />}
+              </button>
           <div className={styles.rightTools}>
+            <div className={styles.collectionGroup}>
+            
+            </div>
             <button
               className={`${styles.actionBtn}`}
               onClick={toggleSigned}

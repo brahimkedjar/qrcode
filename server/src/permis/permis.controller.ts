@@ -64,4 +64,9 @@ export class PermisController {
     const val = !!(body?.isSigned ?? body?.is_signed ?? body?.value);
     return this.permisService.setSignedFlag(id, val);
   }
+
+  @Patch(':id/collection')
+  async setCollectionInfo(@Param('id') id: string, @Body() body?: any) {
+    return this.permisService.setCollectionInfo(id, body ?? {});
+  }
 }

@@ -14,6 +14,7 @@ const API_URL = (import.meta as any).env?.VITE_API_URL || '';
 
 export default function App() {
   const [authUser, setAuthUser] = useState<string>('');
+  const [authGroups, setAuthGroups] = useState<string[]>([]);
   const [view, setView] = useState<'designer' | 'verify' | 'pdfs' | 'taxes'>('designer');
   const [permisId, setPermisId] = useState<string>('');
   const [initialData, setInitialData] = useState<any | null>(null);
@@ -28,7 +29,16 @@ export default function App() {
     try {
       const u = localStorage.getItem('auth_user_name') || '';
       const t = localStorage.getItem('auth_token') || '';
+      let groups: string[] = [];
+      try {
+        const rawGroups = localStorage.getItem('auth_user_groups');
+        if (rawGroups) {
+          const parsed = JSON.parse(rawGroups);
+          if (Array.isArray(parsed)) groups = parsed.map(String);
+        }
+      } catch {}
       if (u && t) setAuthUser(u);
+      setAuthGroups(groups);
     } catch {}
   }, []);
 
@@ -79,24 +89,57 @@ export default function App() {
     }
   };
 
+  const canAccessTaxes = authGroups.includes('cadastre');
+
+  useEffect(() => {
+    if (view === 'taxes' && !canAccessTaxes) {
+      setView('designer');
+    }
+  }, [view, canAccessTaxes]);
+
   if (!authUser) {
-    return <LoginView onLoggedIn={(name) => setAuthUser(name)} />;
+    return (
+      <LoginView
+        onLoggedIn={(name, _token, _username, groups) => {
+          setAuthUser(name);
+          setAuthGroups(groups);
+          if (!groups.includes('cadastre')) {
+            setView('designer');
+          }
+        }}
+      />
+    );
   }
 
   const doLogout = () => {
     try { localStorage.removeItem('auth_user_name'); } catch {}
     try { localStorage.removeItem('auth_token'); } catch {}
+    try { localStorage.removeItem('auth_user_username'); } catch {}
+    try { localStorage.removeItem('auth_user_groups'); } catch {}
     setAuthUser('');
+    setAuthGroups([]);
+    setView('designer');
+  };
+
+  const handleChangeView = (next: 'designer' | 'verify' | 'pdfs' | 'taxes') => {
+    if (next === 'taxes' && !canAccessTaxes) return;
+    setView(next);
   };
 
   return (
     <div style={{ fontFamily: 'Inter, system-ui, Arial' }}>
-      <AuthHeader userName={authUser} onLogout={doLogout} view={view as any} onChangeView={setView as any} />
+      <AuthHeader
+        userName={authUser}
+        onLogout={doLogout}
+        view={view}
+        onChangeView={handleChangeView}
+        canAccessTaxes={canAccessTaxes}
+      />
       {view === 'verify' ? (
         <VerifyQrView />
       ) : view === 'pdfs' ? (
         <PdfGallery />
-      ) : view === 'taxes' ? (
+      ) : view === 'taxes' && canAccessTaxes ? (
         <TaxesPage />
       ) : (
         <div className={panelStyles.wrap}>

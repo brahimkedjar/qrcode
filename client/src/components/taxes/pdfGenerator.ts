@@ -213,7 +213,7 @@ export const generatePDFForPreview = async (type: 'DEA' | 'TS' | 'PRODUIT_ATTRIB
     
     // Main content - using formattedAmount instead of data.amount.toLocaleString()
     setNormalFont();
-    const mainText = `Un ordre de perception est émis par l'Agence nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au ${data.taxReceiverAddress} au titre de paiement des droits d'établissement d'acte d'un ${data.permitType} ${data.permitCode} par la ${data.companyName} à ${data.location}.`;
+    const mainText = `Un ordre de perception est émis par l'Agence nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au 17 rue Arezki Hammani, 3ème étage –Alger au titre de paiement des droits d'établissement d'acte d'un ${data.permitType} ${data.permitCode} par la ${data.companyName} à ${data.location}.`;
     
     const usedMm = addParagraphImage(doc, mainText, margin, yPosition, Math.max(10, contentWidth - 2), { fontPt: 10, lineHeight: 1.4 });
     yPosition += usedMm;
@@ -279,7 +279,7 @@ export const generatePDFForPreview = async (type: 'DEA' | 'TS' | 'PRODUIT_ATTRIB
     
     // Main content - using formattedAmount instead of data.amount.toLocaleString()
     setNormalFont();
-    const mainText = `Un ordre de perception est émis par l'Agence nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au ${data.taxReceiverAddress} au titre de paiement de la taxe superficiaire par ${data.companyName} pour le ${data.permitType} ${data.permitCode} situé à ${data.location} pour la période du ${data.period}.`;
+    const mainText = `Un ordre de perception est émis par l'Agence nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au 17 rue Arezki Hammani, 3ème étage –Alger au titre de paiement de la taxe superficiaire par ${data.companyName} pour le ${data.permitType} ${data.permitCode} situé à ${data.location} pour la période du ${data.period}.`;
     
     const usedMm = addParagraphImage(doc, mainText, margin, yPosition, Math.max(10, contentWidth - 2), { fontPt: 10, lineHeight: 1.4 });
     yPosition += usedMm;
@@ -342,7 +342,7 @@ export const generatePDFForPreview = async (type: 'DEA' | 'TS' | 'PRODUIT_ATTRIB
     
     // Main content - using formattedAmount instead of data.amount.toLocaleString()
     setNormalFont();
-    const mainText = `Un ordre de paiement est émis par l'Agence Nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au ${data.taxReceiverAddress}. Au titre de paiement des droits du produit d'attribution du ${data.permitType} ${data.permitCode} attribué à la ${data.companyName} pour le site de ${data.location}.`;
+    const mainText = `Un ordre de paiement est émis par l'Agence Nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au 17 rue Arezki Hammani, 3ème étage –Alger. Au titre de paiement des droits du produit d'attribution du ${data.permitType} ${data.permitCode} attribué à la ${data.companyName} pour le site de ${data.location}.`;
     
     const usedMm = addParagraphImage(doc, mainText, margin, yPosition, Math.max(10, contentWidth - 2), { fontPt: 10, lineHeight: 1.4 });
     yPosition += usedMm;

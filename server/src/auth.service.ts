@@ -3,6 +3,18 @@ import ldap from 'ldapjs';
 import fs from 'fs';
 import path from 'path';
 
+const DEFAULT_ALLOWED_USERS = [
+  'ANAM1113',
+  'ANAM1122',
+  'ANAM1126',
+  'ANAM1432',
+  'ANAM1364',
+  'ANAM1363',
+  'ANAM1433',
+  'ANAM1358',
+  'ANAM1405',
+];
+
 export type LdapUser = {
   username: string;
   distinguishedName: string | null;
@@ -38,7 +50,9 @@ export class AuthService {
       }
     }
     try {
-      const filePath = path.resolve(process.cwd(), 'server', 'allowed-users.json');
+      const cwdPath = path.resolve(process.cwd(), 'server', 'allowed-users.json');
+      const localPath = path.resolve(__dirname, '..', 'allowed-users.json');
+      const filePath = fs.existsSync(cwdPath) ? cwdPath : localPath;
       const raw = fs.readFileSync(filePath, 'utf8');
       const parsed = JSON.parse(raw) as string[];
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -49,7 +63,7 @@ export class AuthService {
         console.warn('[AuthService] allowed-users.json not loaded:', (err as Error)?.message || err);
       } catch {}
     }
-    return new Set();
+    return new Set(DEFAULT_ALLOWED_USERS.map((u) => u.trim().toUpperCase()).filter(Boolean));
   }
 
   async validateUser(username: string, password: string): Promise<LdapUser> {
