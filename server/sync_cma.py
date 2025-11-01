@@ -341,6 +341,8 @@ def build_dest_nk_index(
 def run_sync(source: str, dest: str, tables: List[str], resume: bool = False, state_path: Optional[str] = None) -> int:
     script_path = os.path.abspath(__file__)
     log_info(f"[INFO] DÃ©marrage de la synchronisation ({script_path})")
+    # Print a clean startup banner with proper accents
+    log_info(f"[INFO] Démarrage de la synchronisation ({script_path})")
     log_info(f"Source : {source}")
     log_info(f"Destination : {dest}")
 

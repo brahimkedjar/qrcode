@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import axios from 'axios';
 import './app.css';
 
@@ -81,14 +83,15 @@ export default function App() {
         (isNumericInput ? Number(raw) : null);
       setProcedureRef(derivedProcedureId);
       setInitialData(data);
+      // Success toast\n      try { toast.success('Donn\u00E9es du permis charg\u00E9es'); } catch {}
     } catch (e: any) {
       setInitialData(null);
       setProcedureRef(null);
       setError(e?.message || 'Failed to load permis');
+      try { toast.error('Échec du chargement du permis'); } catch {}
     } finally {
       setLoading(false);
-    }
-  };
+    } };
 
   const canAccessTaxes = authGroups.includes('cadastre');
 
@@ -120,6 +123,7 @@ export default function App() {
     setAuthUser('');
     setAuthGroups([]);
     setView('designer');
+    try {  } catch {}
   };
 
   const handleChangeView = (next: 'designer' | 'verify' | 'pdfs' | 'taxes' | 'sync') => {
@@ -129,6 +133,7 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: 'Inter, system-ui, Arial' }}>
+      <ToastContainer position="bottom-right" theme="colored" newestOnTop closeOnClick pauseOnHover />
       <AuthHeader
         userName={authUser}
         onLogout={doLogout}
@@ -162,7 +167,7 @@ export default function App() {
                 />
               </div>
               <button className={panelStyles.btn} type="submit" disabled={!permisId || loading}>
-                {loading ? 'Chargement...' : 'Charger les donnees du permis'}
+                {loading ? 'Chargement\u2026' : 'Charger les donn\u00E9es du permis'}
               </button>
             </form>
             {error && <div className={panelStyles.err}>{error}</div>}
@@ -205,3 +210,11 @@ export default function App() {
     </div>
   );
 }
+
+
+
+
+
+
+
+

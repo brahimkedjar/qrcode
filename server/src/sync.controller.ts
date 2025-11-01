@@ -99,6 +99,8 @@ export class SyncController {
       .filter(Boolean);
     send('info', { message: `Démarrage de la synchronisation`, script: scriptPath, source, dest, tables });
 
+    // Emit a clean startup info with proper accents
+    send('info', { message: `Démarrage de la synchronisation`, script: scriptPath, source, dest, tables });
     const build = this.buildProcess(scriptPath, source, dest, tables, resume, statePathOverride);
     const child = spawn(build.cmd, build.args, {
       windowsHide: true,

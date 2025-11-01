@@ -66,8 +66,7 @@ const isCoordinateTableElement = (element: PermisElement): boolean => {
   );
   return COORDINATE_COLUMN_KEYS.every(k => keySet.has(k));
 };
-
-const normalizeCoordinateTableElement = (element: PermisElement): PermisElement => {
+  const normalizeCoordinateTableElement = (element: PermisElement): PermisElement => {
   if (!isCoordinateTableElement(element)) return element;
   const next: any = { ...element };
   let changed = false;
@@ -91,8 +90,7 @@ const normalizeCoordinateTableElement = (element: PermisElement): PermisElement 
   }
   return changed ? next : element;
 };
-
-const normalizeCoordinateTablePage = (page: PermisElement[]): PermisElement[] => {
+  const normalizeCoordinateTablePage = (page: PermisElement[]): PermisElement[] => {
   let changed = false;
   const normalized = page.map(el => {
     const updated = normalizeCoordinateTableElement(el);
@@ -101,8 +99,7 @@ const normalizeCoordinateTablePage = (page: PermisElement[]): PermisElement[] =>
   });
   return changed ? normalized : page;
 };
-
-const normalizeCoordinateTables = (pages: PermisPages): PermisPages => {
+  const normalizeCoordinateTables = (pages: PermisPages): PermisPages => {
   let changed = false;
   const normalized = pages.map(page => {
     const updatedPage = normalizeCoordinateTablePage(page || []);
@@ -111,8 +108,7 @@ const normalizeCoordinateTables = (pages: PermisPages): PermisPages => {
   });
   return changed ? normalized : pages;
 };
-
-const PermisDesigner: React.FC<PermisDesignerProps> = ({
+  const PermisDesigner: React.FC<PermisDesignerProps> = ({
   initialData,
   onSave,
   onGeneratePdf,
@@ -121,7 +117,8 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
 }) => {
   const [pages, setPagesState] = useState<PermisPages>([[], [], []]);
   const [currentPage, setCurrentPage] = useState<number>(PAGES.PERMIS_DETAILS);
-  const [page2DigitsFont, setPage2DigitsFont] = useState<number>(24);
+  const [page2DigitsFont, setPage2DigitsFont] = useState<number>(20);
+  const [page2DefaultsApplied, setPage2DefaultsApplied] = useState<boolean>(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [tool, setTool] = useState<'select' | 'text' | 'rectangle' | 'image' | 'line' | 'qrcode' | 'table'>('select');
   const stageRef = useRef<any>(null);
@@ -419,11 +416,11 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
   useEffect(() => {
     const hasContent = pages.some(page => Array.isArray(page) && page.length > 0);
     if (!hasContent) return;
-    if (!initialPagesRef.current || initialDataRef.current !== initialData) {
+    if (!initialPagesRef.current) {
       initialPagesRef.current = JSON.parse(JSON.stringify(pages));
       initialDataRef.current = initialData;
     }
-  }, [pages, initialData]);
+  }, [pages]);
 
   const handleRefreshTemplates = useCallback(async () => {
     if (!savedPermisId) {
@@ -870,35 +867,30 @@ function createCornerDecorations(color: string, width: number, height: number): 
     typeof initialData?.detenteur === 'string' ? (initialData as any)?.detenteur : ''
   );
   const holderDisplay = pickFirstNonEmpty(holderArabic, holderLatin);
- 
-    // Decide licensed-material suffix based on typeCode (prospection/exploration => باستكشافها, others => باستغلالها)
-    const typeCodeRaw = String((initialData?.typePermis?.code || (initialData?.typePermis as any)?.Code || '') || '').toUpperCase();
-    const explorationCodes = new Set(['AP','PE','PPM','PEM','PEC']);
-    const isExplorationByCode = explorationCodes.has(typeCodeRaw);
-    const materialSuffixByCode = isExplorationByCode ? 'المُرخص باستكشافها' : 'المُرخص باستغلالها:';
 
-    const replaceHolderDots = (text?: string) => {
-      const t = String(text || '');
-      if (!t) return t;
-      if (!holderDisplay) return t;
-      // Determine type phrases (prefer code mapping; keep heuristics as fallback)
-      const typeLabelAr = String((initialData?.typePermis?.libelle_ar || (initialData?.typePermis as any)?.LabelAr || (initialData?.typePermis as any)?.libelle || selectedArticleSet || '') || '').toLowerCase();
-      const isExplorationHeuristic = typeLabelAr.includes('الاستكشاف') || /txc|tec|tem/.test(String(selectedArticleSet || '').toLowerCase());
-      const materialSuffix = isExplorationByCode || isExplorationHeuristic ? 'المُرخص باستكشافها' : 'المُرخص باستغلالها:';
-      return t
-        // المادة المرخّصة .... or لمادة المرخصة .... -> replace dots with type-specific phrase
-        .replace(/(ل?\s*الم[ـ\s]*ادة)\s+المرخ[\u0600-\u06FFA-Za-z\-\u064B-\u0652]*\s*[\.\u2026]{2,}/g, (_m: string, pre: string) => `${pre} ${materialSuffix}`)
-        // المادة .... -> generic fallback
-        .replace(/(ل?\s*الم[ـ\s]*ادة)\s*[\.\u2026]{2,}/g, (_m: string, pre: string) => `${pre} ${materialSuffix}`)
-        // السيد/السيدة .......
-        .replace(/(السيد)\s*\.{2,}/g, `$1 ${holderDisplay}`)
-        .replace(/(السيدة)\s*\.{2,}/g, `$1 ${holderDisplay}`)
-        // المقدم من طرف .......
-        .replace(/(المقدم\s+من\s+طرف)\s*\.{2,}/g, `$1 ${holderDisplay}`)
-        // ....... المقدم من طرف
-        .replace(/\.{2,}\s*(?=المقدم\s+من\s+طرف)/g, `${holderDisplay} `)
-        ;
-    };
+  // Decide licensed-material suffix based on typeCode (AP/PE/PPM/PEM/PEC => exploration)
+  const typeCodeRaw = String((initialData?.typePermis?.code || (initialData?.typePermis as any)?.Code || '') || '').toUpperCase();
+  const explorationCodes = new Set(['AP','PE','PPM','PEM','PEC']);
+  const isExplorationByCode = explorationCodes.has(typeCodeRaw);
+  const explorationSuffix = '\u0627\u0644\u0645\u0627\u062F\u0629 \u0627\u0644\u0627\u0633\u062A\u0643\u0634\u0627\u0641\u064A\u0629';
+  const otherSuffix = '\u0627\u0644\u0645\u0627\u062F\u0629 \u0627\u0644\u0645\u0637\u0644\u0648\u0628\u0629:';
+
+  const replaceHolderDots = (text?: string) => {
+    const t = String(text || '');
+    if (!t) return t;
+    if (!holderDisplay) return t;
+    // Determine type phrases (prefer code mapping; keep heuristics as fallback)
+    const typeLabelAr = String((initialData?.typePermis?.libelle_ar || (initialData?.typePermis as any)?.LabelAr || (initialData?.typePermis as any)?.libelle || selectedArticleSet || '') || '').toLowerCase();
+    const isExplorationHeuristic = /txc|tec|tem/.test(String(selectedArticleSet || '').toLowerCase()) || typeLabelAr.includes('استكشاف');
+    const materialSuffix = (isExplorationByCode || isExplorationHeuristic) ? explorationSuffix : otherSuffix;
+    const dotRe = /[\.\u2026]{2,}/g;
+    let first = true;
+    return t.replace(dotRe, () => {
+      const rep = first ? ` ${materialSuffix}` : ` ${holderDisplay}`;
+      first = false;
+      return rep;
+    });
+  };
   const statutJuridique = pickFirstNonEmpty(
     (initialData?.detenteur as any)?.StatutArab,
     (initialData?.detenteur as any)?.StatutJuridique?.StatutArab,
@@ -911,7 +903,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
     if (!t) return t;
     if (!statutJuridique) return t;
     // Replace default placeholder with actual legal status
-    return t.replace(/الشركة\s+ذات\s+المسؤولية\s+المحدودة/g, statutJuridique);
+    return t.replace(/[\.\\u2026]{2,}/, statutJuridique);
   };
   const replacedSource: ArticleItem[] = source.map(a => ({
     ...a,
@@ -922,14 +914,14 @@ function createCornerDecorations(color: string, width: number, height: number): 
   // If 'decision' is present, combine all following articles into one text element and fit to a single page
   if (articleIds.includes('decision')) {
     const size = canvasSizes[PAGES.ARTICLES] || { width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height };
-    const contentWidth = size.width - marginX * 2;
+  const contentWidth = size.width - marginX * 2;
     const rightEdge = marginX + contentWidth - padding;
     const elementXForScale = (innerWidth: number, scale: number) => rightEdge - (innerWidth * scale);
     // Simple measurement helpers
     let __mCtx: CanvasRenderingContext2D | null = null;
     const ensureCtx = () => { try { if (__mCtx) return __mCtx; const c = document.createElement('canvas'); const ctx = c.getContext('2d'); if (ctx) __mCtx = ctx; return __mCtx; } catch {} return null; };
-    const measureW = (s: string, fs: number, fam?: string) => { const ctx = ensureCtx(); if (ctx) { try { const quoted = fam && /\s/.test(fam) ? `"${fam}"` : (fam || 'Arial'); ctx.font = `${Math.max(8, fs)}px ${quoted}`; const m = ctx.measureText(s); return Math.ceil(m.width || 0); } catch {} } return Math.ceil((s || '').length * fs * 0.48); };
-    const wrapH = (text: string, widthPx: number, fs: number, fam?: string, lh = 1.5) => {
+  const measureW = (s: string, fs: number, fam?: string) => { const ctx = ensureCtx(); if (ctx) { try { const quoted = fam && /\s/.test(fam) ? `"${fam}"` : (fam || 'Arial'); ctx.font = `${Math.max(8, fs)}px ${quoted}`; const m = ctx.measureText(s); return Math.ceil(m.width || 0); } catch {} } return Math.ceil((s || '').length * fs * 0.48); };
+  const wrapH = (text: string, widthPx: number, fs: number, fam?: string, lh = 1.5) => {
       const w = Math.max(10, Math.floor(widthPx));
       const paras = String(text || '').split(/\r?\n/);
       let totalLines = 0;
@@ -950,8 +942,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       }
       return Math.max(fs * lh, Math.ceil(totalLines * fs * lh));
     };
-
-    const idToItem = new Map(replacedSource.map(a => [a.id, a] as const));
+  const idToItem = new Map(replacedSource.map(a => [a.id, a] as const));
     const decisionIdx = articleIds.findIndex(id => id === 'decision');
     const beforeIds = (decisionIdx >= 0)
       ? articleIds.slice(0, decisionIdx).filter(id => idToItem.has(id))
@@ -1247,7 +1238,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       const factor = 0.48;
       return Math.ceil(s.length * fontSize * factor);
     };
-    const withUnderlines: PermisElement[] = [];
+  const withUnderlines: PermisElement[] = [];
     articleElements.forEach(el => {
       withUnderlines.push(el);
       if (el.type === 'text') {
@@ -1472,9 +1463,10 @@ function createCornerDecorations(color: string, width: number, height: number): 
           setTemplates(serverTemplates);
           const lastUsedTemplateId = localStorage.getItem(`lastTemplate_${permisCode}`);
           const numericTemplateId = lastUsedTemplateId ? parseInt(lastUsedTemplateId, 10) : null;
-          const defaultTemplate = serverTemplates.find((t: { id: number }) => t.id === numericTemplateId) || serverTemplates[0];
-          setActiveTemplate(defaultTemplate?.id ?? null);
-          const buildPages = (template?: typeof defaultTemplate): PermisPages => {
+          const defaultTemplate = serverTemplates.find((t: { id: number }) => t.id === numericTemplateId) || null;
+          // Do not auto-apply any template; user will select manually
+          setActiveTemplate(null);
+          const buildPages = (template?: any): PermisPages => {
             if (!template?.elements?.length) {
               return [
                 createPermisDetailsPage(initialData),
@@ -1494,7 +1486,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
               filterElementsByPage(templateElements, 2) || createArticlesPage(initialData)
             ];
           };
-          const initialPages = buildPages(defaultTemplate);
+  const initialPages = buildPages(undefined);
           let sets = listArticleSets();
           try {
             const serverSets = await (await import('./articleSets')).listServerArticleSets();
@@ -1512,6 +1504,8 @@ function createCornerDecorations(color: string, width: number, height: number): 
           const initSnap = JSON.parse(JSON.stringify(initialPages)) as PermisPages;
           setPages(initSnap);
           pushHistory(initSnap);
+          initialPagesRef.current = JSON.parse(JSON.stringify(initSnap));
+          initialDataRef.current = initialData;
           const preselected = loadedArticles.filter(a => (a as any).preselected).map(a => a.id);
           const effectiveIds = preselected.length ? preselected : loadedArticles.map(a => a.id);
           setSelectedArticleIds(effectiveIds);
@@ -1635,7 +1629,6 @@ function createCornerDecorations(color: string, width: number, height: number): 
     const params = new URLSearchParams({ id: code });
     return `${baseUrl}?${params.toString()}`;
   };
-
   const createQRCodeElement = (data: any, x: number, y: number): PermisElement => {
     return {
       id: uuidv4(),
@@ -1670,7 +1663,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       }
       return '';
     };
-    const holderArabic = pickFirstNonEmpty(
+  const holderArabic = pickFirstNonEmpty(
       (data as any)?.detenteur_ar,
       (data?.detenteur as any)?.NomArab,
       (data?.detenteur as any)?.nom_ar,
@@ -1769,8 +1762,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       if (b.getTime() + oneDayMs >= anniversary.getTime()) return naive;
       return Math.max(0, naive - 1);
     };
-
-        const formatFr = (d: Date | null) => d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '';
+  const formatFr = (d: Date | null) => d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '';
 
      // Robust Arabic duration composer with Unicode escapes to avoid encoding issues
     const computeDureeAr2 = (): string => {
@@ -1848,9 +1840,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       const ilaWord = '\u0625\u0644\u0640\u0640\u0649';
       return `${phrase} (${minWord} ${formatFr(dStart)} ${ilaWord} ${formatFr(dEnd)})`;
     };
-   
-
-     const computeDureeAr = (): string => { return computeDureeAr2();
+  const computeDureeAr = (): string => { return computeDureeAr2();
     };
 
     // Details block (RTL on the right side of the page)
@@ -1872,7 +1862,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       } catch {}
       return __measureCtx;
     };
-    const measureTextWidth = (text: string, fontSize: number, fontFamily?: string): number => {
+  const measureTextWidth = (text: string, fontSize: number, fontFamily?: string): number => {
       const s = String(text || '');
       if (!s) return 0;
       const ctx = ensureMeasureCtx();
@@ -1892,7 +1882,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       const factor = isArabic ? 0.48 : 0.42;
       return Math.ceil(s.length * fontSize * factor);
     };
-    const statutJuridique = pickFirstNonEmpty(
+  const statutJuridique = pickFirstNonEmpty(
       (initialData?.detenteur as any)?.StatutJuridique?.StatutArab,
       (initialData?.detenteur as any)?.StatutArab,
       (initialData?.detenteur as any)?.statut?.StatutArab,
@@ -1950,7 +1940,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       parts.forEach(p => { lines += Math.ceil(Math.max(1, p.trim().length) / perLine); });
       return Math.max(fontSize * lineHeight, lines * fontSize * lineHeight);
     };
-    const addRow = (value: string) => {
+  const addRow = (value: string) => {
       const fz = 26; const lh = 1.35;
       // Unified details renderer in use; disable legacy row rendering
       return;
@@ -2418,8 +2408,8 @@ const detailsFontSize = 30;
   const getPointerWorldPos = useCallback(() => {
     const stage = stageRef.current;
     if (!stage) return { x: 0, y: 0 } as { x: number; y: number };
-    const p = stage.getPointerPosition() || { x: 0, y: 0 };
-    const sx = stage.scaleX?.() || zoom || 1;
+  const p = stage.getPointerPosition() || { x: 0, y: 0 };
+  const sx = stage.scaleX?.() || zoom || 1;
     const sy = stage.scaleY?.() || zoom || 1;
     return { x: p.x / sx, y: p.y / sy };
   }, [zoom]);
@@ -2431,11 +2421,9 @@ const detailsFontSize = 30;
     const height = Math.abs(a.y - b.y);
     return { x, y, width, height };
   };
-
   const intersects = (r: { x: number; y: number; width: number; height: number }, s: { x: number; y: number; width: number; height: number }) => {
     return !(r.x + r.width < s.x || s.x + s.width < r.x || r.y + r.height < s.y || s.y + s.height < r.y);
   };
-
   const computeSelectedInRect = useCallback((sel: { x: number; y: number; width: number; height: number }) => {
     const stage = stageRef.current;
     if (!stage) return [] as string[];
@@ -2758,7 +2746,7 @@ const detailsFontSize = 30;
       while (r < text.length && isWord(text[r])) r++;
       return [l, r] as [number, number];
     };
-    const [start, end] = (start0 === end0) ? expandToWord(value, start0) : [start0, end0];
+  const [start, end] = (start0 === end0) ? expandToWord(value, start0) : [start0, end0];
     if (start >= end) return;
     const selectionSlice = value.slice(start, end);
     const digitPatternLocal = /^[\s\u0030-\u0039\u0660-\u0669\u06F0-\u06F9\u2212\-\/\.]+$/u;
@@ -2878,10 +2866,10 @@ const detailsFontSize = 30;
       y: 100 / zoom,
       width: type === 'text' ? 240 : type === 'line' ? 150 : 120,
       height: type === 'text' ? 36 : type === 'line' ? 2 : 60,
-      text: type === 'text' ? (currentPage === PAGES.ARTICLES ? '?†?µ ?…?§?¯?©' : '?†?µ ?¬?¯???¯') : undefined,
+      text: type === 'text' ? (currentPage === PAGES.ARTICLES ? 'Nouvelle text' : 'Nouvelle text') : undefined,
       language: type === 'text' ? (currentPage === PAGES.ARTICLES ? 'ar' : 'fr') : undefined,
       direction: type === 'text' ? (currentPage === PAGES.ARTICLES ? 'rtl' : 'ltr') : undefined,
-      fontSize: 20,
+      fontSize: (type === 'text' && currentPage === PAGES.ARTICLES) ? 28 : 20,
       fontFamily: type === 'text' ? (currentPage === PAGES.ARTICLES ? ARABIC_FONTS[0] : FONT_FAMILIES[0]) : FONT_FAMILIES[0],
       color: '#101822',
       draggable: true,
@@ -2901,7 +2889,7 @@ const detailsFontSize = 30;
 
   const handleDeleteSelected = useCallback(() => {
     setElementsForCurrent(prev => prev.filter(el => !selectedIds.includes(el.id)));
-    if (selectedIds.length > 0) toast.success('?‰l?©ments supprim?©s');
+    if (selectedIds.length > 0) toast.success('Éléments supprimés');
     setSelectedIds([]);
   }, [selectedIds, setElementsForCurrent]);
 
@@ -2909,7 +2897,7 @@ const detailsFontSize = 30;
     if (selectedIds.length === 0) return;
     const selectedElements = elements.filter(el => selectedIds.includes(el.id));
     localStorage.setItem('copiedElements', JSON.stringify(selectedElements));
-    toast.success('?‰l?©ments copi?©s');
+    toast.success('Éléments copiés');
   }, [selectedIds, elements]);
 
   const handlePasteSelected = useCallback(() => {
@@ -2920,7 +2908,7 @@ const detailsFontSize = 30;
       const newElements = parsed.map(el => ({ ...el, id: uuidv4(), x: (el.x + 20) / zoom, y: (el.y + 20) / zoom }));
       setElementsForCurrent(prev => [...prev, ...newElements]);
       setSelectedIds(newElements.map(el => el.id));
-      toast.success('?‰l?©ments coll?©s');
+      toast.success('Éléments collés');
     } catch (err) {
       console.error('Failed to paste elements', err);
     }
@@ -2964,7 +2952,7 @@ const detailsFontSize = 30;
       toast.success('Permis saved successfully');
     } catch (error) {
       console.error('Failed to save permis', error);
-      toast.error("?‰chec de l'enregistrement du permis");
+      toast.error("Échec de l'enregistrement du permis");
     } finally {
       setSavingPermis(false);
     }
@@ -3012,7 +3000,7 @@ const detailsFontSize = 30;
       toast.success('Template saved successfully');
     } catch (error) {
       console.error('Failed to save template', error);
-      toast.error("?‰chec de l'enregistrement du template");
+      toast.error("Échec de l'enregistrement du template");
     } finally {
       setSavingTemplate(false);
     }
@@ -3034,7 +3022,7 @@ const detailsFontSize = 30;
         templateId: activeTemplate,
         name
       });
-      toast.success('Design sauvegardé avec succ?¨s');
+      toast.success('Design sauvegardé avec succès');
       try {
         if (savedPermisId) {
           const templatesResponse = await axios.get(`${apiURL}/api/permis/${savedPermisId}/templates`);
@@ -3048,7 +3036,7 @@ const detailsFontSize = 30;
       }
     } catch (error) {
       console.error('Failed to save design', error);
-      toast.error('?‰chec de la sauvegarde du design');
+      toast.error('Échec de la sauvegarde du design');
     } finally {
       setIsLoading(false);
     }
@@ -3166,7 +3154,7 @@ const detailsFontSize = 30;
             }
             return canvas.toDataURL('image/jpeg', quality);
           };
-          const jpegData = await toJpegOnWhite(pngData, currentSize.width, currentSize.height, jpegQuality);
+  const jpegData = await toJpegOnWhite(pngData, currentSize.width, currentSize.height, jpegQuality);
           const comp = pdfQuality === 'small' ? 'FAST' : 'SLOW';
           pdf.addImage(jpegData, 'JPEG', x, y, imgWidth, imgHeight, undefined, comp as any);
         }
@@ -3186,10 +3174,10 @@ const detailsFontSize = 30;
         console.warn('Failed to upload PDF copy to server', e);
       }
       pdf.save(`${defaultName}.pdf`);
-      toast.success("PDF généré avec succés");
+      toast.success("PDF généré avec succès");
     } catch (error) {
       console.error("Failed to generate PDF", error);
-      toast.error("?‰chec de la génération du PDF");
+      toast.error("Échec de la génération du PDF");
     } finally {
       setIsLoading(false);
     }
@@ -3204,55 +3192,76 @@ const detailsFontSize = 30;
       toast.success('Permis and template saved successfully');
     } catch (error) {
       console.error('Failed to save permis', error);
-      toast.error("?‰chec de l'enregistrement du permis");
+      toast.error("Échec de l'enregistrement du permis");
     } finally {
       setIsLoading(false);
     }
   }, [pages, flattenWithPageIndex, initialData, onSavePermis, onSave]);
 
   const handleApplyTemplate = useCallback(async (templateId: string) => {
-    if (loadingTemplates) return;
-    try {
-      const numericTemplateId = parseInt(templateId, 10);
-      const template = templates.find(t => t.id === numericTemplateId);
-      if (!template) {
-        toast.error('Template not found');
-        return;
+  if (loadingTemplates) return;
+  try {
+    const raw = (templateId || '').trim();
+    // Empty selection means: revert to the initially loaded default design
+    if (!raw) {
+      let base: PermisPages | null = null;
+      if (initialPagesRef.current && initialDataRef.current === initialData) {
+        try { base = JSON.parse(JSON.stringify(initialPagesRef.current)) as PermisPages; } catch {}
       }
-      let templateElements: PermisElement[] = [];
-      if (typeof template.elements === 'string') {
-        templateElements = JSON.parse(template.elements);
-      } else if (Array.isArray(template.elements)) {
-        templateElements = template.elements;
+      if (!base) {
+        base = [
+          createPermisDetailsPage(initialData),
+          /* coordinates page intentionally omitted */
+          createArticlesPage(initialData),
+        ];
       }
-      const elementsWithIds = templateElements.map(el => ({
-        ...el,
-        id: el.id || uuidv4(),
-        meta: {
-          ...el.meta,
-          pageIndex: el.meta?.pageIndex || 0
-        }
-      }));
-      const page0Elements = elementsWithIds.filter(el => el.meta?.pageIndex === 0);
-      //const page1Elements = elementsWithIds.filter(el => el.meta?.pageIndex === 1);
-      const page2Elements = elementsWithIds.filter(el => el.meta?.pageIndex === 1);
-      const newPages: PermisPages = [
-        page0Elements.length > 0 ? page0Elements : createPermisDetailsPage(initialData),
-      //  page1Elements.length > 0 ? page1Elements : createCoordinatesPage(initialData),
-        page2Elements.length > 0 ? page2Elements : createArticlesPage(initialData)
-      ];
-      setPages(newPages);
-      initialPagesRef.current = JSON.parse(JSON.stringify(newPages));
-      initialDataRef.current = initialData;
-      setActiveTemplate(numericTemplateId);
+      setPages(base);
+      setActiveTemplate(null);
       setSelectedIds([]);
-      pushHistory(newPages);
-      toast.success(`Template "${template.name}" applied successfully`);
-    } catch (error) {
-      console.error('Error applying template:', error);
-      toast.error('Failed to apply template');
+      pushHistory(base);
+      toast.info('Design par défaut chargé');
+      return;
     }
-  }, [templates, loadingTemplates, initialData, pushHistory]);
+
+    const numericTemplateId = parseInt(raw, 10);
+    const template = templates.find(t => t.id === numericTemplateId);
+    if (!template) {
+      toast.error('Template not found');
+      return;
+    }
+    let templateElements: PermisElement[] = [];
+    if (typeof template.elements === 'string') {
+      templateElements = JSON.parse(template.elements);
+    } else if (Array.isArray(template.elements)) {
+      templateElements = template.elements;
+    }
+    const elementsWithIds = templateElements.map(el => ({
+      ...el,
+      id: el.id || uuidv4(),
+      meta: {
+        ...el.meta,
+        pageIndex: el.meta?.pageIndex || 0
+      }
+    }));
+    const page0Elements = elementsWithIds.filter(el => el.meta?.pageIndex === 0);
+    //const page1Elements = elementsWithIds.filter(el => el.meta?.pageIndex === 1);
+    const page2Elements = elementsWithIds.filter(el => el.meta?.pageIndex === 1);
+    const newPages: PermisPages = [
+      page0Elements.length > 0 ? page0Elements : createPermisDetailsPage(initialData),
+    //  page1Elements.length > 0 ? page1Elements : createCoordinatesPage(initialData),
+      page2Elements.length > 0 ? page2Elements : createArticlesPage(initialData)
+    ];
+    setPages(newPages);
+    // Do NOT overwrite the initialPagesRef here; keep it as the true initial/default design snapshot
+    setActiveTemplate(numericTemplateId);
+    setSelectedIds([]);
+    pushHistory(newPages);
+    toast.success(`Template "${template.name}" applied successfully`);
+  } catch (error) {
+    console.error('Error applying template:', error);
+    toast.error('Failed to apply template');
+  }
+}, [templates, loadingTemplates, initialData, pushHistory]);
 
   const handlePropertyChange = useCallback((property: keyof PermisElement, value: any) => {
     if (selectedIds.length === 0) return;
@@ -3602,13 +3611,13 @@ const detailsFontSize = 30;
       offsetX: event.clientX - originLeft,
       offsetY: event.clientY - originTop,
     };
-    const handleMove = (ev: MouseEvent) => {
+  const handleMove = (ev: MouseEvent) => {
       if (!overlayDragRef.current) return;
       const newLeft = ev.clientX - overlayDragRef.current.offsetX;
       const newTop = ev.clientY - overlayDragRef.current.offsetY;
       setTextOverlay(prev => (prev ? { ...prev, left: newLeft, top: newTop } : prev));
     };
-    const handleUp = () => {
+  const handleUp = () => {
       overlayDragRef.current = null;
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
@@ -3702,6 +3711,30 @@ const detailsFontSize = 30;
       return next;
     });
   }, []);
+
+    // On initial load, set default font for page 2 (ARTICLES) and apply digit size = 20
+  useEffect(() => {
+    if (page2DefaultsApplied) return;
+    const pageIdx = PAGES.ARTICLES;
+    const page = pages[pageIdx];
+    if (!page || page.length === 0) return; // wait until content exists
+    // Apply default font + size for text elements on page 2
+    setPages(prev => {
+      const next = [...prev];
+      const arr = (next[pageIdx] || []).map(el => {
+        if (!el || el.type !== 'text') return el;
+        const changed: any = { ...el };
+        changed.fontFamily = 'Traditional Arabic';
+        changed.fontSize = 28;
+        return changed;
+      });
+      next[pageIdx] = arr;
+      return next;
+    });
+    // Apply digit default size
+    applyDigitsFontSizeToPage2(20);
+    setPage2DefaultsApplied(true);
+  }, [pages, page2DefaultsApplied, applyDigitsFontSizeToPage2]);
 
 const pageLabel = (idx: number) => {
   if (idx === PAGES.PERMIS_DETAILS) return 'Page 1';
@@ -4037,7 +4070,7 @@ const pageLabel = (idx: number) => {
                           request: resp?.data?.request,
                           debug: resp?.data?.debug
                         });
-                        toast.info('QR code generated. See properties panel for debug details.');
+                        toast.info('QR code généré. Consultez le panneau des propriétés pour plus de détails.');
                         // Use the unique code as QR payload
                         qrPayload = code;
                       } catch (e) {
@@ -4159,7 +4192,7 @@ const pageLabel = (idx: number) => {
                         const height = Math.max(36, (local.height * scaleY) * zoom);
                         const data = Array.isArray((tbl as any).tableData) ? (tbl as any).tableData : [];
                         const row = data[rowIndex] || {};
-                        const value = row[colKey] != null ? String(row[colKey]) : '';
+  const value = row[colKey] != null ? String(row[colKey]) : '';
                         const baseFont = Math.max(20, (tbl as any).tableFontSize || (tbl as any).fontSize || 18);
                         setTextOverlay({
                           id: `table:${tbl.id}:${rowIndex}:${colKey}`,
@@ -4631,6 +4664,14 @@ const pageLabel = (idx: number) => {
 };
 
 export default PermisDesigner;
+
+
+
+
+
+
+
+
 
 
 

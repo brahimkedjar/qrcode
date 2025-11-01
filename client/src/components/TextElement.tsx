@@ -293,29 +293,35 @@ export const TextElement: React.FC<TextElementProps> = ({
   // Build continuous underline bridges per line to avoid tiny gaps between segments (e.g., between Arabic and Latin tokens)
   const extraUnderlines = useMemo(() => {
     if (!styledLayout) return [] as Array<{ x: number; y: number; w: number; h: number; color: string }>; 
-    const groups = new Map<number, { x1: number; x2: number; y: number; h: number; color: string }>();
+    type G = { x1: number; x2: number; baseline: number; maxF: number; color: string };
+    const groups = new Map<number, G>();
     for (const seg of styledLayout.placed) {
       if (!seg.underline) continue;
       const segW = measureWidth(seg.text, seg.fontSize, element.fontFamily, seg.fontWeight);
       const baseline = Math.round(seg.y + seg.ascent);
-      const y = baseline + 20.5; // draw slightly below baseline similar to Konva underline
       const x1 = seg.x;
       const x2 = seg.x + segW;
-      const h = Math.max(1, Math.round(seg.fontSize * 0.09));
       const color = (seg.color || element.color || '#000') as string;
       const g = groups.get(baseline);
       if (!g) {
-        groups.set(baseline, { x1, x2, y, h, color });
+        groups.set(baseline, { x1, x2, baseline, maxF: seg.fontSize, color });
       } else {
         g.x1 = Math.min(g.x1, x1);
         g.x2 = Math.max(g.x2, x2);
-        g.h = Math.max(g.h, h);
-        // Prefer an explicit color if present
+        g.maxF = Math.max(g.maxF, seg.fontSize);
         if (g.color === '#000' && color !== '#000') g.color = color;
       }
     }
-    return Array.from(groups.values()).map(g => ({ x: g.x1, y: g.y, w: Math.max(0, g.x2 - g.x1), h: g.h, color: g.color }));
-  }, [styledLayout, element.fontFamily, element.color]);
+    // Map each group to a single underline rect with dynamic offset/thickness similar to Konva
+    const rects: Array<{ x: number; y: number; w: number; h: number; color: string }> = [];
+    for (const g of groups.values()) {
+      // Slightly lower and thicker than before per user feedback
+      const thickness = Math.max(1, Math.round(g.maxF * 0.08));
+      const offset = Math.max(1, Math.round(g.maxF * 0.50));
+      rects.push({ x: g.x1, y: g.baseline + offset, w: Math.max(0, g.x2 - g.x1), h: thickness, color: g.color });
+    }
+    return rects;
+  }, [styledLayout, element.fontFamily, element.color, element.lineHeight]);
 
   // Update bounds for simple or styled rendering
   useEffect(() => {
@@ -399,7 +405,7 @@ export const TextElement: React.FC<TextElementProps> = ({
               fontFamily={safeFontFamily(element.fontFamily) as any}
               fontStyle={seg.fontWeight === 'bold' ? 'bold' : 'normal'}
               fill={seg.color || element.color}
-              textDecoration={seg.underline ? 'underline' : undefined}
+              // underline drawn separately to ensure continuity
               align={'left'}
               lineHeight={element.lineHeight || 1.2}
               wrap={'none'}

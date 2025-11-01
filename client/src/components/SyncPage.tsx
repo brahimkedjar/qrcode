@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'react-toastify';
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || '';
 
@@ -25,6 +26,7 @@ export default function SyncPage() {
   const start = useCallback(() => {
     reset();
     setRunning(true);
+    try { toast.info('Synchronisation démarrée'); } catch {}
     const url = new URL(`${API_URL}/api/sync/run`);
     if (script.trim()) url.searchParams.set('script', script.trim());
     if (source.trim()) url.searchParams.set('source', source.trim());
@@ -46,9 +48,11 @@ export default function SyncPage() {
       setRunning(false);
       es.close();
       sourceRef.current = null;
+      try { if (code === 0) toast.success('Synchronisation terminée avec succès'); else toast.error(`Synchronisation terminée avec code ${code}`); } catch {}
     });
     es.onerror = () => {
       setLines((ls) => [...ls, '[ERR] Connexion SSE interrompue']);
+      try { toast.error('Connexion SSE interrompue'); } catch {}
     };
   }, [API_URL, script, source, dest, selected, resume, reset]);
 
@@ -57,7 +61,7 @@ export default function SyncPage() {
       sourceRef.current.close();
       sourceRef.current = null;
       setRunning(false);
-      setLines((ls) => [...ls, "[INFO] Arrêt demandé par l’utilisateur"]);
+      setLines((ls) => [...ls, "[INFO] Arrêt demandé par l'utilisateur"]);
     }
   }, []);
 
@@ -73,10 +77,12 @@ export default function SyncPage() {
       const names: string[] = Array.isArray(data.tables) ? data.tables : [];
       setTables(names);
       setSelected(new Set(names));
+      try { toast.success(`Tables chargées (${names.length})`); } catch {}
     } catch (e: any) {
       setTables([]);
       setSelected(new Set());
-      setTablesError(e?.message || 'Echec de chargement des tables');
+      setTablesError(e?.message || 'Échec de chargement des tables');
+      try { toast.error(e?.message || 'Échec de chargement des tables'); } catch {}
     } finally {
       setLoadingTables(false);
     }
@@ -91,7 +97,7 @@ export default function SyncPage() {
   const statusText = useMemo(() => {
     if (running) return 'Synchronisation en cours…';
     if (exitCode === null) return 'En attente';
-    return exitCode === 0 ? 'Terminé avec succès' : `Terminé avec code ${exitCode}`;
+    return exitCode === 0 ? 'Terminée avec succès' : `Terminée avec code ${exitCode}`;
   }, [running, exitCode]);
 
   return (
@@ -116,7 +122,7 @@ export default function SyncPage() {
           />
           <input
             style={{ flex: 1, minWidth: 320, padding: 8 }}
-            placeholder="Chemin personnalisé du script (optionnel)"
+            placeholder="Chemin personnalise du script (optionnel)"
             value={script}
             onChange={(e) => setScript(e.target.value)}
           />
@@ -151,7 +157,7 @@ export default function SyncPage() {
                 setLines((ls) => [...ls, `[ERR] Échec de réinitialisation: ${data?.error || resp.status}`]);
               }
             } catch (e: any) {
-              setLines((ls) => [...ls, `[ERR] ${e?.message || 'Erreur réseau'}`]);
+              setLines((ls) => [...ls, `[ERR] ${e?.message || 'Erreur reseau'}`]);
             }
           }}
           disabled={running}
@@ -171,10 +177,10 @@ export default function SyncPage() {
                 const display = typeof state === 'string' ? state : JSON.stringify(state, null, 2);
                 setLines((ls) => [...ls, `[INFO] État mémoire (${data.statePath}):`, display]);
               } else {
-                setLines((ls) => [...ls, `[ERR] Échec de lecture mémoire: ${data?.error || resp.status}`]);
+                setLines((ls) => [...ls, `[ERR] Échec de lecture de la mémoire: ${data?.error || resp.status}`]);
               }
             } catch (e: any) {
-              setLines((ls) => [...ls, `[ERR] ${e?.message || 'Erreur réseau'}`]);
+              setLines((ls) => [...ls, `[ERR] ${e?.message || 'Erreur reseau'}`]);
             }
           }}
           disabled={running}
@@ -191,7 +197,7 @@ export default function SyncPage() {
         </button>
         <button onClick={() => setSelected(new Set(tables))} disabled={tables.length === 0} style={{ padding: '6px 12px' }}>Tout sélectionner</button>
         <button onClick={() => setSelected(new Set())} disabled={tables.length === 0} style={{ padding: '6px 12px' }}>Tout désélectionner</button>
-        <div style={{ fontSize: 12, opacity: .7 }}>Sélectionnées: {selected.size} / {tables.length}</div>
+        <div style={{ fontSize: 12, opacity: .7 }}>Selectionnees: {selected.size} / {tables.length}</div>
       </div>
       {tablesError && <div style={{ color: '#b00' }}>{tablesError}</div>}
       <div style={{
@@ -219,7 +225,7 @@ export default function SyncPage() {
         )}
       </div>
       <div style={{ opacity: .7, fontSize: 12 }}>
-        Astuce: la sélection des tables est transmise au script via la variable d’environnement <code>SYNC_TABLES</code> (CSV) et <code>SYNC_TABLES_JSON</code>. Exemple PowerShell: <code>$env:SYNC_TABLES</code>.
+        Astuce: la selection des tables est transmise au script via la variable d'environnement <code>SYNC_TABLES</code> (CSV) et <code>SYNC_TABLES_JSON</code>. Exemple PowerShell: <code>$env:SYNC_TABLES</code>.
       </div>
       <div ref={logRef} style={{
         background: '#0c0c0c', color: '#d0d0d0', padding: 12,
@@ -227,11 +233,24 @@ export default function SyncPage() {
         minHeight: 320, maxHeight: 520, overflow: 'auto', borderRadius: 6,
         border: '1px solid #222'
       }}>
-        {lines.length === 0 ? <div style={{ opacity: .6 }}>Aucun log pour le moment…</div> : (
+        {lines.length === 0 ? <div style={{ opacity: .6 }}>Aucun log pour le moment...</div> : (
           lines.map((l, i) => <div key={i}>{l}</div>)
         )}
       </div>
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
