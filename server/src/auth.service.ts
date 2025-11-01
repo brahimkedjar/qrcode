@@ -78,6 +78,37 @@ export class AuthService {
       throw new UnauthorizedException('Utilisateur non autorisé');
     }
 
+    // Dev mode: bypass LDAP for any allowed user
+    {
+      const flag = String(process.env.DEV_NO_LDAP || '').trim().toLowerCase();
+      if (flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on') {
+        // eslint-disable-next-line no-console
+        console.warn(`[AuthService] DEV_NO_LDAP active; bypassing LDAP for ${normalizedUsername}`);
+        return {
+          username: normalizedUsername,
+          distinguishedName: null,
+          email: `${normalizedUsername}@${this.ldapDomain}`,
+          displayName: normalizedUsername,
+        };
+      }
+    }
+
+    // Local bypass for development: allow ANAM1405 without LDAP when password matches
+    // Controlled by env var LOCAL_BYPASS_PASSWORD; falls back to the provided default.
+    if (normalizedUsername === 'ANAM1405') {
+      const expected = process.env.LOCAL_BYPASS_PASSWORD || 'MAma14242028@/';
+      const given = String(password ?? '').trim();
+      if (given === expected) {
+        return {
+          username: normalizedUsername,
+          distinguishedName: null,
+          email: `ANAM1405@${this.ldapDomain}`,
+          displayName: 'ANAM1405',
+        };
+      }
+      throw new UnauthorizedException('Nom d\u2019utilisateur ou mot de passe incorrect');
+    }
+
     const userDn = (process.env.LDAP_BIND_FORMAT || '{username}@' + this.ldapDomain).replace(
       '{username}',
       username,

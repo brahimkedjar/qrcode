@@ -107,13 +107,30 @@ export default function TaxesPreviewModal({ open, type, initialData, onClose, on
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className={styles.label}>Adresse</label>
-                  <input className={styles.input} value={form.taxReceiverAddress || ''} onChange={(e) => onChange('taxReceiverAddress', e.target.value)} />
+                  <select
+                    className={styles.input}
+                    value={form.taxReceiverAddress || ''}
+                    onChange={(e) => onChange('taxReceiverAddress', e.target.value)}
+                  >
+                    <option value="17 rue Arezki Hammani, 3ème étage –Alger">17 rue Arezki Hammani, 3ème étage –Alger</option>
+                    <option value="18 rue beniourtilane , 4ème étage –Alger">18 rue beniourtilane , 4ème étage –Alger</option>
+                  </select>
                 </div>
               </div>
               <div className={styles.row}>
                 <div style={{ width: 180 }}>
                   <label className={styles.label}>Date</label>
                   <input className={styles.input} type="date" value={(form.date ? new Date(form.date).toISOString().slice(0,10) : '')} onChange={(e) => onChange('date', new Date(e.target.value))} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className={styles.label}>Lieu</label>
+                  <input className={styles.input} value={form.place || ''} onChange={(e) => onChange('place', e.target.value)} placeholder="Alger" />
+                </div>
+              </div>
+              <div className={styles.row}>
+                <div style={{ flex: 1 }}>
+                  <label className={styles.label}>Président (mention)</label>
+                  <input className={styles.input} value={form.president || ''} onChange={(e) => onChange('president', e.target.value)} placeholder="P/ Le Président du Comité de Direction" />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className={styles.label}>Signature</label>
@@ -138,4 +155,3 @@ export default function TaxesPreviewModal({ open, type, initialData, onClose, on
     </div>
   );
 }
-

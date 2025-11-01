@@ -3,6 +3,7 @@ import axios from 'axios';
 import './app.css';
 
 import PermisDesigner from './components/PermisDesigner';
+import SyncPage from './components/SyncPage';
 import LoginView from './components/auth/LoginView';
 import AuthHeader from './components/auth/AuthHeader';
 import PdfGallery from './components/PdfGallery';
@@ -15,7 +16,7 @@ const API_URL = (import.meta as any).env?.VITE_API_URL || '';
 export default function App() {
   const [authUser, setAuthUser] = useState<string>('');
   const [authGroups, setAuthGroups] = useState<string[]>([]);
-  const [view, setView] = useState<'designer' | 'verify' | 'pdfs' | 'taxes'>('designer');
+  const [view, setView] = useState<'designer' | 'verify' | 'pdfs' | 'taxes' | 'sync'>('designer');
   const [permisId, setPermisId] = useState<string>('');
   const [initialData, setInitialData] = useState<any | null>(null);
   const [procedureRef, setProcedureRef] = useState<number | null>(null);
@@ -121,7 +122,7 @@ export default function App() {
     setView('designer');
   };
 
-  const handleChangeView = (next: 'designer' | 'verify' | 'pdfs' | 'taxes') => {
+  const handleChangeView = (next: 'designer' | 'verify' | 'pdfs' | 'taxes' | 'sync') => {
     if (next === 'taxes' && !canAccessTaxes) return;
     setView(next);
   };
@@ -141,6 +142,8 @@ export default function App() {
         <PdfGallery />
       ) : view === 'taxes' && canAccessTaxes ? (
         <TaxesPage />
+      ) : view === 'sync' ? (
+        <SyncPage />
       ) : (
         <div className={panelStyles.wrap}>
           <div className={panelStyles.hero}>

@@ -39,9 +39,12 @@ export const generateUniqueOrderNumber = (
 // Helper function to format date as in the examples
 const formatDate = (date: Date): string => {
   const day = date.getDate();
-  const month = date.toLocaleString('fr-FR', { month: 'short' }).toUpperCase();
+  // fr-FR short month usually includes a trailing dot (ex: "oct.").
+  // Remove any trailing dot and do NOT add an extra one to avoid "OCT..".
+  const rawMonth = date.toLocaleString('fr-FR', { month: 'short' }).toUpperCase();
+  const month = rawMonth.replace(/\.$/, '');
   const year = date.getFullYear();
-  return `${day} ${month}. ${year}`;
+  return `${day} ${month} ${year}`;
 };
 
 // Helper function to split text into lines that fit within specified width
@@ -213,7 +216,7 @@ export const generatePDFForPreview = async (type: 'DEA' | 'TS' | 'PRODUIT_ATTRIB
     
     // Main content - using formattedAmount instead of data.amount.toLocaleString()
     setNormalFont();
-    const mainText = `Un ordre de perception est émis par l'Agence nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au 17 rue Arezki Hammani, 3ème étage –Alger au titre de paiement des droits d'établissement d'acte d'un ${data.permitType} ${data.permitCode} par la ${data.companyName} à ${data.location}.`;
+    const mainText = `Un ordre de perception est émis par l'Agence nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au ${data.taxReceiverAddress} au titre de paiement des droits d'établissement d'acte d'un ${data.permitType} ${data.permitCode} par la ${data.companyName} à ${data.location}.`;
     
     const usedMm = addParagraphImage(doc, mainText, margin, yPosition, Math.max(10, contentWidth - 2), { fontPt: 10, lineHeight: 1.4 });
     yPosition += usedMm;
@@ -230,9 +233,9 @@ export const generatePDFForPreview = async (type: 'DEA' | 'TS' | 'PRODUIT_ATTRIB
     yPosition += 15;
     
     // Date and signature
-    doc.text(`Fait à Alger, le ${formatDate(data.date)}`, margin, yPosition);
+    doc.text(`Fait à {data.place || 'Alger'}, le {formatDate(data.date)}`, margin, yPosition);
     yPosition += 10;
-    doc.text(data.president ||"P/Le Président du Comité de Direction", margin, yPosition);
+    doc.text(data.president || "P/ Le Président du Comité de Direction", margin, yPosition);
     yPosition += 7;
     doc.text(data.signatureName || "Seddik BENABBES", margin, yPosition);
     
@@ -279,7 +282,7 @@ export const generatePDFForPreview = async (type: 'DEA' | 'TS' | 'PRODUIT_ATTRIB
     
     // Main content - using formattedAmount instead of data.amount.toLocaleString()
     setNormalFont();
-    const mainText = `Un ordre de perception est émis par l'Agence nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au 17 rue Arezki Hammani, 3ème étage –Alger au titre de paiement de la taxe superficiaire par ${data.companyName} pour le ${data.permitType} ${data.permitCode} situé à ${data.location} pour la période du ${data.period}.`;
+    const mainText = `Un ordre de perception est émis par l'Agence nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au ${data.taxReceiverAddress} au titre de paiement de la taxe superficiaire par ${data.companyName} pour le ${data.permitType} ${data.permitCode} situé à ${data.location} pour la période du ${data.period}.`;
     
     const usedMm = addParagraphImage(doc, mainText, margin, yPosition, Math.max(10, contentWidth - 2), { fontPt: 10, lineHeight: 1.4 });
     yPosition += usedMm;
@@ -298,7 +301,7 @@ export const generatePDFForPreview = async (type: 'DEA' | 'TS' | 'PRODUIT_ATTRIB
     // Date and signature
     doc.text(`Fait à Alger, le ${formatDate(data.date)}`, margin, yPosition);
     yPosition += 10;
-    doc.text(data.president || "P/Le Président du Comité de Direction", margin, yPosition);
+    doc.text(data.president || "P/ Le Président du Comité de Direction", margin, yPosition);
     yPosition += 7;
     doc.text(data.signatureName || "Seddik BENABBES", margin, yPosition);
     
@@ -342,7 +345,7 @@ export const generatePDFForPreview = async (type: 'DEA' | 'TS' | 'PRODUIT_ATTRIB
     
     // Main content - using formattedAmount instead of data.amount.toLocaleString()
     setNormalFont();
-    const mainText = `Un ordre de paiement est émis par l'Agence Nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au 17 rue Arezki Hammani, 3ème étage –Alger. Au titre de paiement des droits du produit d'attribution du ${data.permitType} ${data.permitCode} attribué à la ${data.companyName} pour le site de ${data.location}.`;
+    const mainText = `Un ordre de paiement est émis par l'Agence Nationale des Activités Minières (siège central) d'un montant de ${formattedAmount} DA au profit du ${data.taxReceiver} sise au ${data.taxReceiverAddress}. Au titre de paiement des droits du produit d'attribution du ${data.permitType} ${data.permitCode} attribué à la ${data.companyName} pour le site de ${data.location}.`;
     
     const usedMm = addParagraphImage(doc, mainText, margin, yPosition, Math.max(10, contentWidth - 2), { fontPt: 10, lineHeight: 1.4 });
     yPosition += usedMm;
@@ -361,10 +364,21 @@ export const generatePDFForPreview = async (type: 'DEA' | 'TS' | 'PRODUIT_ATTRIB
     // Date and signature
     doc.text(`Fait à Alger, le ${formatDate(data.date)}`, margin, yPosition);
     yPosition += 10;
-    doc.text("P/ Le Président du Comité de Direction", margin, yPosition);
+    doc.text(data.president || "P/ Le Président du Comité de Direction", margin, yPosition);
     yPosition += 7;
     doc.text(data.signatureName || "Seddik BÉNABBES", margin, yPosition);
   }
   
   return doc.output('datauristring');
 };
+
+
+
+
+
+
+
+
+
+
+

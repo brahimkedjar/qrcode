@@ -139,9 +139,17 @@ export default function TaxesPage() {
     const res = await fetch(dataUrl);
     return await res.blob();
   };
+  // Format a period token from Access-like date values (strip time if present)
+  const formatPeriodToken = (s?: string): string => {
+    if (!s) return '';
+    const t = String(s).trim();
+    const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    return m ? `${m[1]}/${m[2]}/${m[3]}` : t.replace(/\s+\d{2}:\d{2}:\d{2}.*/, '');
+  };
+
   const openPreviewTS = async (row: TaxeSupRow) => {
-    const orderNumber = generateUniqueOrderNumber('TS', 0, row.id, row.idTitre, new Date().getFullYear());
-    const period = [row.DatePerDebut, row.datePerFin].filter(Boolean).join(' → ');
+    const orderNumber = String(row.NumeroPerc || generateUniqueOrderNumber('TS', 0, row.id, row.idTitre, new Date().getFullYear()));
+    const period = [formatPeriodToken(row.DatePerDebut), formatPeriodToken(row.datePerFin)].filter(Boolean).join(' au ');
     const data = {
       ...makeOrderBase(),
       amount: parseAmount(row.Taxe),
@@ -155,7 +163,7 @@ export default function TaxesPage() {
   };
 
   const openPreviewDEA = async (row: DeaRow) => {
-    const orderNumber = generateUniqueOrderNumber('DEA', 0, row.id, row.idTitre, new Date().getFullYear());
+    const orderNumber = String(row.NumeroPerc || generateUniqueOrderNumber('DEA', 0, row.id, row.idTitre, new Date().getFullYear()));
     const data = {
       ...makeOrderBase(),
       amount: parseAmount(row.droit),
@@ -181,15 +189,15 @@ export default function TaxesPage() {
       lieuDit,
       daira,
       taxReceiver: 'Receveur des impôts',
-      taxReceiverAddress: '-',
+      taxReceiverAddress: '17 rue Arezki Hammani, 3ème étage –Alger',
       signatureName: 'Seddik BENABBES',
       president: 'P/ Le Président du Comité de Direction',
     } as any;
   };
 
   const downloadTaxe = async (row: TaxeSupRow) => {
-    const orderNumber = generateUniqueOrderNumber('TS', 0, row.id, row.idTitre, new Date().getFullYear());
-    const period = [row.DatePerDebut, row.datePerFin].filter(Boolean).join(' → ');
+    const orderNumber = String(row.NumeroPerc || generateUniqueOrderNumber('TS', 0, row.id, row.idTitre, new Date().getFullYear()));
+    const period = [formatPeriodToken(row.DatePerDebut), formatPeriodToken(row.datePerFin)].filter(Boolean).join(' au ');
     const data = {
       ...makeOrderBase(),
       amount: parseAmount(row.Taxe),
@@ -207,7 +215,7 @@ export default function TaxesPage() {
   };
 
   const downloadDea = async (row: DeaRow) => {
-    const orderNumber = generateUniqueOrderNumber('DEA', 0, row.id, row.idTitre, new Date().getFullYear());
+    const orderNumber = String(row.NumeroPerc || generateUniqueOrderNumber('DEA', 0, row.id, row.idTitre, new Date().getFullYear()));
     const data = {
       ...makeOrderBase(),
       amount: parseAmount(row.droit),
@@ -444,3 +452,10 @@ export default function TaxesPage() {
     </div>
   );
 }
+
+
+
+
+
+
+

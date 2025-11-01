@@ -13,7 +13,8 @@ const DEFAULT_TABLES = {
   statutjuridique: process.env.ACCESS_TABLE_STATUTJURIDIQUE || 'statutjuridique',
   procedures: process.env.ACCESS_TABLE_PROCEDURES || 'Procedures',
   taxesSup: process.env.ACCESS_TABLE_TAXES_SUP || 'TaxesSup',
-  droitsEtabl: process.env.ACCESS_TABLE_DROITS_ETABL || 'DroitsEtabl'
+  droitsEtabl: process.env.ACCESS_TABLE_DROITS_ETABL || 'DroitsEtabl',
+  typesProcedures: process.env.ACCESS_TABLE_TYPES_PROCEDURES || 'TypesProcedures'
 };
 
 // Map Access column names to API fields expected by the client
@@ -72,6 +73,10 @@ const DEFAULT_COLUMNS = {
     id: process.env.ACCESS_COL_DROITS_ID || 'id',
     titreId: process.env.ACCESS_COL_DROITS_TITRE_ID || 'idTitre',
     numeroPerc: process.env.ACCESS_COL_DROITS_NUMERO_PERC || 'NumeroPerc'
+  },
+  typesProcedures: {
+    id: process.env.ACCESS_COL_TPROC_ID || 'id',
+    nom: process.env.ACCESS_COL_TPROC_NOM || 'Nom'
   }
 };
 
@@ -238,7 +243,11 @@ export class PermisService {
       takenDate: (() => {
         const raw = (r as any)[takenDateCol];
         const parsed = parseAccessDate(raw);
-        return parsed ? parsed.toISOString().slice(0, 10) : '';
+        if (!parsed) return '';
+        const y = parsed.getFullYear();
+        const m = String(parsed.getMonth() + 1).padStart(2, '0');
+        const d2 = String(parsed.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d2}`;
       })(),
       takenBy: toStr((r as any)[takenByCol])
     };
@@ -252,15 +261,19 @@ export class PermisService {
       const pc: any = DEFAULT_COLUMNS.procedures;
       const dateCol = this.quote(pc.dateOption || 'date_option');
       const titreCol = this.quote(pc.titreId || 'idTitre');
-      const labelCol = this.quote(pc.label || 'Procedure');
-      const whereId = isNumericId ? id : this.access.escapeValue(id);
+      const labelPick = await this.pickExistingColumn(procTable, [pc.label, 'Nom', 'Procedure', 'Libelle', 'Label']);
+      const labelCol = labelPick ? labelPick.quoted : this.quote(pc.label || 'Procedure');
+      const whereId = isNumericId ? String(id) : String(this.access.escapeValue(String(id)));
       try {
-        const sqlOpt = `SELECT TOP 1 ${dateCol} AS opt_date FROM ${procTable} WHERE ${titreCol} = ${whereId} AND ${labelCol} LIKE 'Opté%' ORDER BY ${dateCol} DESC`;
+        const sqlOpt = `SELECT TOP 1 ${dateCol} AS opt_date FROM ${procTable} WHERE ${titreCol} = ${whereId} AND ${labelCol} LIKE 'Opt%' ORDER BY ${dateCol} DESC`;
         const optRows = await this.access.query(sqlOpt);
         if (optRows && optRows.length) {
           const optDateParsed = parseAccessDate(optRows[0]?.opt_date);
           if (optDateParsed) {
-            val.optionDate = optDateParsed.toISOString().slice(0, 10);
+            const y = optDateParsed.getFullYear();
+            const m = String(optDateParsed.getMonth() + 1).padStart(2, '0');
+            const d2 = String(optDateParsed.getDate()).padStart(2, '0');
+            val.optionDate = `${y}-${m}-${d2}`;
             val.date_option = val.optionDate;
           }
         }
@@ -309,18 +322,168 @@ export class PermisService {
 
     if (await hasColumn()) return;
 
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    // Try each ALTER, and if the table is locked, backoff and retry a few times.
     for (const sql of attempts) {
-      try {
-        await this.access.query(sql);
-        break;
-      } catch (err) {
-        try { this.logger.warn(`[ensureColumnExists] attempt failed (${sql}): ${(err as any)?.message || err}`); } catch {}
+      let applied = false;
+      let lastErr: any = null;
+      for (let i = 0; i < 3; i++) {
+        try {
+          await this.access.query(sql);
+          applied = true;
+          break;
+        } catch (err) {
+          lastErr = err;
+          const msg = (err as any)?.message ? String((err as any).message) : '';
+          const locked = /Could not lock table/i.test(msg) || /database is locked/i.test(msg);
+          try { this.logger.warn(`[ensureColumnExists] attempt failed (${sql}) [try ${i+1}/3]: ${msg}`); } catch {}
+          if (locked) {
+            await sleep(800 + i * 400);
+            continue;
+          }
+          break; // non-lock error; bail to next ALTER variant
+        }
       }
+      if (applied) break;
     }
 
     if (!(await hasColumn())) {
       throw new Error(`Unable to add column ${column} to table ${table}`);
     }
+  }
+
+  // Detect if a column exists in a table by attempting a zero-row select
+  private async columnExists(table: string, column: string): Promise<boolean> {
+    try {
+      await this.access.query(`SELECT ${this.quote(column)} FROM ${table} WHERE 1 = 0`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Return the first existing column among candidates, with raw and quoted forms
+  private async pickExistingColumn(table: string, candidates: (string | undefined)[]): Promise<{ name: string; quoted: string } | null> {
+    for (const cand of candidates) {
+      const col = (cand || '').trim();
+      if (!col) continue;
+      if (await this.columnExists(table, col)) return { name: col, quoted: this.quote(col) };
+    }
+    return null;
+  }
+
+  // Find a suitable TypesProcedures.id to satisfy FK when inserting an option row
+  private async resolveProcedureTypeIdForOption(typeTitreIdLiteral?: string | null): Promise<string | null> {
+    const table = (DEFAULT_TABLES as any).typesProcedures;
+    if (!table) return null;
+    const cols: any = (DEFAULT_COLUMNS as any).typesProcedures || { id: 'id', nom: 'Nom' };
+    const idCol = cols.id || 'id';
+    // Pick the label/name column that exists in TypesProcedures (Nom vs Procedure vs Libelle)
+    let labelColQuoted = this.quote(cols.nom || 'Nom');
+    try {
+      const pick = await this.pickExistingColumn(table, [cols.nom, 'Nom', 'Procedure', 'Libelle', 'Label']);
+      if (pick) labelColQuoted = pick.quoted;
+    } catch {}
+    const idColQuoted = this.quote(idCol);
+    // Optionally filter by the TypesProcedures.idTypeTitre if present and provided
+    let typeTitreFilter = '';
+    let idTypeTitreColumn: { name: string; quoted: string } | null = null;
+    try {
+      idTypeTitreColumn = await this.pickExistingColumn(table, ['idTypeTitre', 'IdTypeTitre', 'id_type_titre']);
+      if (idTypeTitreColumn && typeTitreIdLiteral) {
+        const raw = String(typeTitreIdLiteral).trim();
+        const unquoted = raw.replace(/^'(.+)'$/, '$1');
+        if (/^\d+$/.test(unquoted)) {
+          const asNum = unquoted;
+          const asTxt = String(this.access.escapeValue(unquoted));
+          typeTitreFilter = ` AND (${idTypeTitreColumn.quoted} = ${asNum} OR ${idTypeTitreColumn.quoted} = ${asTxt})`;
+        } else {
+          typeTitreFilter = ` AND ${idTypeTitreColumn.quoted} = ${raw}`;
+        }
+      }
+    } catch {}
+    const queries: string[] = [
+      `SELECT TOP 1 ${idColQuoted} AS tid FROM ${table} WHERE ${labelColQuoted} LIKE 'Opt%'${typeTitreFilter} ORDER BY ${idColQuoted}`,
+      `SELECT TOP 1 ${idColQuoted} AS tid FROM ${table} WHERE UCase(${labelColQuoted}) LIKE 'OPT%'${typeTitreFilter} ORDER BY ${idColQuoted}`,
+      `SELECT TOP 1 ${idColQuoted} AS tid FROM ${table} WHERE UCase(${labelColQuoted}) LIKE 'DEMANDE%'${typeTitreFilter} ORDER BY ${idColQuoted}`,
+      `SELECT TOP 1 ${idColQuoted} AS tid FROM ${table} WHERE 1=1${typeTitreFilter} ORDER BY ${idColQuoted}`
+    ];
+    for (const sql of queries) {
+      try {
+        const rows = await this.access.query(sql);
+        if (rows && rows.length) {
+          const v = rows[0]?.tid ?? rows[0]?.[idCol];
+          if (v != null && v !== '') {
+            const s = String(v);
+            return /^\d+$/.test(s) ? s : this.access.escapeValue(s) as any as string;
+          }
+        }
+      } catch {}
+    }
+    // Retry without idTypeTitre filter in case of type mismatch issues
+    const queriesNoFilter: string[] = [
+      `SELECT TOP 1 ${idColQuoted} AS tid FROM ${table} WHERE ${labelColQuoted} LIKE 'Opt%' ORDER BY ${idColQuoted}`,
+      `SELECT TOP 1 ${idColQuoted} AS tid FROM ${table} WHERE UCase(${labelColQuoted}) LIKE 'OPT%' ORDER BY ${idColQuoted}`,
+      `SELECT TOP 1 ${idColQuoted} AS tid FROM ${table} WHERE UCase(${labelColQuoted}) LIKE 'DEMANDE%' ORDER BY ${idColQuoted}`,
+      `SELECT TOP 1 ${idColQuoted} AS tid FROM ${table} ORDER BY ${idColQuoted}`
+    ];
+    for (const sql of queriesNoFilter) {
+      try {
+        const rows = await this.access.query(sql);
+        if (rows && rows.length) {
+          const v = rows[0]?.tid ?? rows[0]?.[idCol];
+          if (v != null && v !== '') {
+            const s = String(v);
+            return /^\d+$/.test(s) ? s : this.access.escapeValue(s) as any as string;
+          }
+        }
+      } catch {}
+    }
+    return null;
+  }
+
+  // Insert a robust "opté à titre" row into Procedures, adapting to schema differences
+  private async logOptionProcedureRow(
+    table: string,
+    titreIdLiteral: string,
+    targetCode: string,
+    typeTitreIdLiteral: string | null,
+    optionDateLiteral: string | null
+  ) {
+    const pc: any = DEFAULT_COLUMNS.procedures;
+    // Ensure date_option exists
+    const dateColName = pc.dateOption || 'date_option';
+    await this.ensureColumnExists(table, dateColName, [
+      `ALTER TABLE ${table} ADD COLUMN ${dateColName} DATETIME`,
+      `ALTER TABLE ${table} ADD COLUMN ${dateColName} DATE`,
+      `ALTER TABLE ${table} ADD COLUMN ${dateColName} TEXT(50)`
+    ]);
+    const dateCol = this.quote(dateColName);
+
+    // Resolve actual column names
+    const titreColPick = await this.pickExistingColumn(table, [pc.titreId, 'idTitre', 'IdTitre', 'titre_id', 'TitreId']);
+    const typeTitreColPick = await this.pickExistingColumn(table, [pc.typeId, 'idTypeTitre', 'IdTypeTitre', 'id_type_titre']);
+    const typeProcedureColPick = await this.pickExistingColumn(table, ['idTypeProcedure', 'IdTypeProcedure', 'id_type_procedure']);
+    const labelColPick = await this.pickExistingColumn(table, [pc.label, 'Procedure', 'Nom', 'Libelle', 'Label']);
+
+    const columns: string[] = [];
+    const values: string[] = [];
+    if (titreColPick) { columns.push(titreColPick.quoted); values.push(titreIdLiteral); }
+    if (typeTitreColPick && typeTitreIdLiteral) { columns.push(typeTitreColPick.quoted); values.push(typeTitreIdLiteral); }
+    if (typeProcedureColPick) {
+      const procTypeId = await this.resolveProcedureTypeIdForOption(typeTitreIdLiteral);
+      if (procTypeId) { columns.push(typeProcedureColPick.quoted); values.push(procTypeId); }
+    }
+    if (labelColPick) {
+      const label = `Opté à titre (${targetCode})`;
+      columns.push(labelColPick.quoted);
+      values.push(String(this.access.escapeValue(label)));
+    }
+    columns.push(dateCol);
+    values.push(optionDateLiteral ?? 'NULL');
+
+    const insertSql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${values.join(', ')})`;
+    await this.access.query(insertSql);
   }
 
   async runRaw(sql: string) {
@@ -688,31 +851,46 @@ export class PermisService {
   }
 
   async setCollectionInfo(id: string, payload: any) {
-    await this.ensureCollectionColumns();
     const t: any = (DEFAULT_TABLES as any).permis;
     const c: any = (DEFAULT_COLUMNS as any).permis;
     const dateCol = c.takenDate || 'date_remise_titre';
     const nameCol = c.takenBy || 'nom_remise_titre';
     const isNumericId = /^\d+$/.test(String(id));
+    // Ensure columns exist; if table is locked, proceed best-effort with existing columns only
+    try {
+      await this.ensureCollectionColumns();
+    } catch (e) {
+      try { this.logger.warn(`[setCollectionInfo] ensureCollectionColumns skipped due to: ${(e as any)?.message || e}`); } catch {}
+    }
 
     const takenDateRaw = payload?.takenDate ?? payload?.date ?? payload?.dateTaken ?? payload?.taken_date ?? null;
     const takenByRaw = payload?.takenBy ?? payload?.name ?? payload?.taken_by ?? payload?.recipient ?? null;
 
     const assignments: string[] = [];
     const dateLiteral = this.formatAccessDateLiteral(takenDateRaw);
-    assignments.push(dateLiteral ? `${dateCol} = ${dateLiteral}` : `${dateCol} = NULL`);
-
     const nameVal = String(takenByRaw ?? '').trim();
-    assignments.push(nameVal ? `${nameCol} = ${this.access.escapeValue(nameVal)}` : `${nameCol} = NULL`);
+
+    // Only include columns that actually exist to avoid "Too few parameters" when table is locked
+    const dateColExists = await this.columnExists(t, dateCol).catch(() => false);
+    const nameColExists = await this.columnExists(t, nameCol).catch(() => false);
+    if (dateColExists) assignments.push(dateLiteral ? `${dateCol} = ${dateLiteral}` : `${dateCol} = NULL`);
+    if (nameColExists) assignments.push(nameVal ? `${nameCol} = ${this.access.escapeValue(nameVal)}` : `${nameCol} = NULL`);
 
     const whereId = isNumericId ? id : this.access.escapeValue(String(id));
-    const sql = `UPDATE ${t} SET ${assignments.join(', ')} WHERE ${c.id} = ${whereId}`;
-    await this.access.query(sql);
+    if (assignments.length) {
+      const sql = `UPDATE ${t} SET ${assignments.join(', ')} WHERE ${c.id} = ${whereId}`;
+      await this.access.query(sql).catch((err) => {
+        const msg = (err as any)?.message ? String((err as any).message) : '';
+        try { this.logger.warn(`[setCollectionInfo] update failed: ${msg}`); } catch {}
+        throw err;
+      });
+    }
     const isoMatch = dateLiteral?.match(/#(\d{4})-(\d{2})-(\d{2})#/);
     const isoDate = isoMatch ? `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}` : null;
 
     return {
-      ok: true,
+      ok: assignments.length > 0,
+      message: assignments.length ? undefined : 'Columns unavailable (table locked); please close Access and retry',
       takenDate: isoDate,
       takenBy: nameVal
     };
@@ -722,7 +900,7 @@ export class PermisService {
     const t = DEFAULT_TABLES.permis;
     const c = DEFAULT_COLUMNS.permis;
     const isNumericId = /^\d+$/.test(String(id));
-    const whereId = isNumericId ? String(id) : this.access.escapeValue(String(id));
+    const whereId = isNumericId ? String(id) : String(this.access.escapeValue(String(id)));
     const rows = await this.access.query(`SELECT * FROM ${t} WHERE ${c.id} = ${whereId}`);
     if (!rows.length) {
       throw new Error('Permis introuvable');
@@ -743,7 +921,7 @@ export class PermisService {
       throw new Error(`Type cible ${targetCode} introuvable`);
     }
 
-    const typeLiteral = /^\d+$/.test(String(targetType.id)) ? String(targetType.id) : this.access.escapeValue(String(targetType.id));
+    const typeLiteral: string = /^\\d+$/.test(String(targetType.id)) ? String(targetType.id) : String(this.access.escapeValue(String(targetType.id)));
     await this.access.query(`UPDATE ${t} SET ${c.typePermis} = ${typeLiteral} WHERE ${c.id} = ${whereId}`);
 
     const proceduresTable = DEFAULT_TABLES.procedures;
@@ -763,18 +941,39 @@ export class PermisService {
       ]);
       const dateCol = this.quote(dateColName);
       const label = `Opté en titre (${targetCode})`;
-      const columns = [titreCol, typeCol, labelCol, dateCol];
-      const values = [
-        whereId,
-        typeLiteral,
-        this.access.escapeValue(label),
-        optionLiteral ?? 'NULL'
-      ];
+      const columns: string[] = [titreCol, typeCol, labelCol, dateCol];
+      const values: string[] = [String(whereId), String(typeLiteral), String(this.access.escapeValue(label)), optionLiteral ?? 'NULL'];
       const insertSql = `INSERT INTO ${proceduresTable} (${columns.join(', ')}) VALUES (${values.join(', ')})`;
       try {
         await this.access.query(insertSql);
       } catch (err) {
         try { this.logger.warn(`[optPermisType] insertion procédure échouée: ${(err as any)?.message || err}`); } catch {}
+      }
+    }
+    // Fallback: ensure we still create a Procedures row using adaptive schema detection
+    if (proceduresTable) {
+      try {
+        // Skip if an Opt row already exists for this titre (best-effort)
+        let shouldInsert = true;
+        try {
+          const pc: any = DEFAULT_COLUMNS.procedures;
+          const titreColPick = await this.pickExistingColumn(proceduresTable, [pc.titreId, 'idTitre', 'IdTitre', 'titre_id', 'TitreId']);
+          const labelColPick = await this.pickExistingColumn(proceduresTable, [pc.label, 'Procedure', 'Nom', 'Libelle', 'Label']);
+          const dateColName = pc.dateOption || 'date_option';
+          const dateCol = this.quote(dateColName);
+          if (titreColPick && labelColPick) {
+            const where = `${titreColPick.quoted} = ${whereId} AND ${labelColPick.quoted} LIKE 'Opt%'` + (optionLiteral ? ` AND ${dateCol} = ${optionLiteral}` : '');
+            const chkSql = `SELECT TOP 1 * FROM ${proceduresTable} WHERE ${where}`;
+            const chk = await this.access.query(chkSql).catch(() => []);
+            if (chk && chk.length) shouldInsert = false;
+          }
+        } catch {}
+
+        if (shouldInsert) {
+          await this.logOptionProcedureRow(proceduresTable, String(whereId), targetCode, String(typeLiteral), optionLiteral);
+        }
+      } catch (e) {
+        try { this.logger.warn(`[optPermisType] fallback insert warning: ${(e as any)?.message || e}`); } catch {}
       }
     }
 
@@ -928,3 +1127,15 @@ export class PermisService {
     };
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+

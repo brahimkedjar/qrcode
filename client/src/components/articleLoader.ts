@@ -37,7 +37,9 @@ export const toArticleElements = (options: {
   let currentY = options.yStart;
 
   const buildCombined = (title?: string, content?: string): { text: string; titleLen: number } => {
-    const t = (title || '').trim();
+    const tRaw = (title || '').trim();
+    // Replace the normal space between Arabic word and Latin/number with NBSP so underline is continuous
+    const t = tRaw.replace(/([\u0600-\u06FF]+)\s+([0-9A-Za-z]+)/g, '$1\u00A0$2');
     const c = (content || '').trim();
     if (!t && !c) return { text: '', titleLen: 0 };
     if (!t) return { text: c, titleLen: 0 };
@@ -59,6 +61,8 @@ export const toArticleElements = (options: {
       options.lineHeight
     );
 
+    // Keep title bold, but avoid text-decoration underline to prevent gaps between words.
+    // A single continuous rule is drawn separately in the designer.
     const styledRanges = (titleLen > 0) ? [{ start: 0, end: titleLen, fontWeight: 'bold', underline: true }] : undefined as any;
     elements.push({
       id: uuidv4(),

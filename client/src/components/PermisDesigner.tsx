@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Stage, Layer, Transformer, Rect } from 'react-konva';
 import {
@@ -150,31 +150,44 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
   const [pdfQuality, setPdfQuality] = useState<'high' | 'balanced' | 'small'>(() => {
     try {
       const v = localStorage.getItem('pdf_export_quality');
-      return (v === 'high' || v === 'balanced' || v === 'small') ? (v as any) : 'high';
-    } catch { return 'high'; }
+      return (v === 'high' || v === 'balanced' || v === 'small') ? (v as any) : 'balanced';
+    } catch { return 'balanced'; }
   });
   const apiURL = process.env.NEXT_PUBLIC_API_URL;
   const normalizeDateInput = (val: any): string => {
+    // Normalize to YYYY-MM-DD using local date parts (avoid UTC shifts)
+    const toYmd = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
     if (val == null || val === '') return '';
     if (val instanceof Date && !isNaN(val.getTime())) {
-      return val.toISOString().slice(0, 10);
+      return toYmd(val);
     }
     const s = String(val).trim();
     if (!s) return '';
-    let match = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    // Already normalized ISO date
+    const mIso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (mIso) return `${mIso[1]}-${mIso[2]}-${mIso[3]}`;
+    // yyyy/m/d or yyyy-mm-dd
+    let match = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
     if (match) {
       const [, yy, mm, dd] = match;
-      const date = new Date(Number(yy), Number(mm) - 1, Number(dd));
-      return isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+      const d = new Date(Number(yy), Number(mm) - 1, Number(dd));
+      return isNaN(d.getTime()) ? '' : toYmd(d);
     }
+    // dd/MM/yyyy
     match = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (match) {
       const [, dd, mm, yy] = match;
-      const date = new Date(Number(yy), Number(mm) - 1, Number(dd));
-      return isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+      const d = new Date(Number(yy), Number(mm) - 1, Number(dd));
+      return isNaN(d.getTime()) ? '' : toYmd(d);
     }
-    const date = new Date(s);
-    return isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+    // Fallback
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? '' : toYmd(d);
   };
   const [isSigned, setIsSigned] = useState<boolean>(() => {
     try {
@@ -1086,6 +1099,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       if (titlePrefix) {
         const start = acc + (prepend ? 1 : 0);
         const end = start + titlePrefix.length;
+        // Keep title bold only; avoid text underline to prevent gaps between Arabic and Latin glyphs.
         styledRanges.push({ start, end, fontWeight: 'bold', underline: true });
       }
       acc = combinedText.length;
@@ -1244,11 +1258,11 @@ function createCornerDecorations(color: string, width: number, height: number): 
           const titlePart = txt.slice(0, ci + 1);
           const fz = (el as any).fontSize || 24;
           const lh = (el as any).lineHeight || 1.8;
-          // Underline width at ~73% of title visual width (bounded by column)
+          // Underline width close to full title visual width (bounded by column)
           const titleVisualW = estimateWidth(titlePart, fz);
           const uW = Math.min(
             (el.width as number) || (contentWidth - padding * 2),
-            Math.max(40, Math.floor(titleVisualW * 0.59))
+            Math.max(60, Math.floor(titleVisualW * 0.95))
           );
           withUnderlines.push({
             id: uuidv4(),

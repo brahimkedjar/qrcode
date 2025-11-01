@@ -4,8 +4,8 @@ import styles from './header.module.css';
 type Props = {
   userName: string;
   onLogout: () => void;
-  view?: 'designer' | 'verify' | 'pdfs' | 'taxes';
-  onChangeView?: (v: 'designer' | 'verify' | 'pdfs' | 'taxes') => void;
+  view?: 'designer' | 'verify' | 'pdfs' | 'taxes' | 'sync' ;
+  onChangeView?: (v: 'designer' | 'verify' | 'pdfs' | 'taxes' | 'sync') => void;
   canAccessTaxes?: boolean;
 };
 
@@ -25,6 +25,7 @@ export default function AuthHeader({ userName, onLogout, view = 'designer', onCh
             {canAccessTaxes && (
               <button className={`${styles.tab} ${view === 'taxes' ? styles.tabActive : ''}`} onClick={() => onChangeView('taxes')}>Taxes</button>
             )}
+            <button className={`${styles.tab} ${view === 'sync' ? styles.tabActive : ''}`} onClick={() => onChangeView('sync')}>Synchronisation</button>
           </div>
         )}
         <div className={styles.user}>{userName}</div>
