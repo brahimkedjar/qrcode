@@ -290,6 +290,33 @@ export const TextElement: React.FC<TextElementProps> = ({
     };
   }, [element.text, element.styledRanges, element.width, element.fontSize, element.fontFamily, element.lineHeight, element.textAlign, element.direction]);
 
+  // Build continuous underline bridges per line to avoid tiny gaps between segments (e.g., between Arabic and Latin tokens)
+  const extraUnderlines = useMemo(() => {
+    if (!styledLayout) return [] as Array<{ x: number; y: number; w: number; h: number; color: string }>; 
+    const groups = new Map<number, { x1: number; x2: number; y: number; h: number; color: string }>();
+    for (const seg of styledLayout.placed) {
+      if (!seg.underline) continue;
+      const segW = measureWidth(seg.text, seg.fontSize, element.fontFamily, seg.fontWeight);
+      const baseline = Math.round(seg.y + seg.ascent);
+      const y = baseline + 20.5; // draw slightly below baseline similar to Konva underline
+      const x1 = seg.x;
+      const x2 = seg.x + segW;
+      const h = Math.max(1, Math.round(seg.fontSize * 0.09));
+      const color = (seg.color || element.color || '#000') as string;
+      const g = groups.get(baseline);
+      if (!g) {
+        groups.set(baseline, { x1, x2, y, h, color });
+      } else {
+        g.x1 = Math.min(g.x1, x1);
+        g.x2 = Math.max(g.x2, x2);
+        g.h = Math.max(g.h, h);
+        // Prefer an explicit color if present
+        if (g.color === '#000' && color !== '#000') g.color = color;
+      }
+    }
+    return Array.from(groups.values()).map(g => ({ x: g.x1, y: g.y, w: Math.max(0, g.x2 - g.x1), h: g.h, color: g.color }));
+  }, [styledLayout, element.fontFamily, element.color]);
+
   // Update bounds for simple or styled rendering
   useEffect(() => {
     if (styledLayout) {
@@ -361,24 +388,29 @@ export const TextElement: React.FC<TextElementProps> = ({
         />
       ) : (
         // Styled rich text renderer with wrapping and RTL-aware alignment
-        (styledLayout?.placed || []).map((seg, i) => (
-          <Text
-            key={`${element.id}-seg-${i}`}
-            x={seg.x}
-            y={seg.y}
-            text={formatDisplayText(seg.text)}
-            fontSize={seg.fontSize}
-            fontFamily={safeFontFamily(element.fontFamily) as any}
-            fontStyle={seg.fontWeight === 'bold' ? 'bold' : 'normal'}
-            fill={seg.color || element.color}
-            textDecoration={seg.underline ? 'underline' : undefined}
-            align={'left'}
-            lineHeight={element.lineHeight || 1.2}
-            wrap={'none'}
-            direction={direction}
-            listening={false}
-          />
-        ))
+        <>
+          {(styledLayout?.placed || []).map((seg, i) => (
+            <Text
+              key={`${element.id}-seg-${i}`}
+              x={seg.x}
+              y={seg.y}
+              text={formatDisplayText(seg.text)}
+              fontSize={seg.fontSize}
+              fontFamily={safeFontFamily(element.fontFamily) as any}
+              fontStyle={seg.fontWeight === 'bold' ? 'bold' : 'normal'}
+              fill={seg.color || element.color}
+              textDecoration={seg.underline ? 'underline' : undefined}
+              align={'left'}
+              lineHeight={element.lineHeight || 1.2}
+              wrap={'none'}
+              direction={direction}
+              listening={false}
+            />
+          ))}
+          {extraUnderlines.map((u, i) => (
+            <Rect key={`${element.id}-uline-${i}`} x={u.x} y={u.y} width={u.w} height={u.h} fill={u.color} listening={false} />
+          ))}
+        </>
       )}
     </Group>
   );

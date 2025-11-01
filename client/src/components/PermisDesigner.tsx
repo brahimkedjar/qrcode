@@ -121,6 +121,7 @@ const PermisDesigner: React.FC<PermisDesignerProps> = ({
 }) => {
   const [pages, setPagesState] = useState<PermisPages>([[], [], []]);
   const [currentPage, setCurrentPage] = useState<number>(PAGES.PERMIS_DETAILS);
+  const [page2DigitsFont, setPage2DigitsFont] = useState<number>(24);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [tool, setTool] = useState<'select' | 'text' | 'rectangle' | 'image' | 'line' | 'qrcode' | 'table'>('select');
   const stageRef = useRef<any>(null);
@@ -3661,6 +3662,47 @@ const detailsFontSize = 30;
     setCurrentPage(p => p + 1);
   }, [canNext]);
 
+  // Apply a font size override to all digit sequences on page 2 (ARTICLES)
+  const applyDigitsFontSizeToPage2 = useCallback((newSize: number) => {
+    if (!Number.isFinite(newSize) || newSize <= 0) return;
+    setPage2DigitsFont(newSize);
+    const DIGIT_SEQ = /[\u0030-\u0039\u0660-\u0669\u06F0-\u06F9]+/g;
+    setPages(prev => {
+      const next = [...prev];
+      const pageIdx = PAGES.ARTICLES;
+      const page = next[pageIdx] || [];
+      const updated = page.map(el => {
+        if (!el || el.type !== 'text') return el;
+        const text = String(el.text || '');
+        if (!text) return el;
+        // Find digit sequences
+        const ranges: { start: number; end: number }[] = [];
+        let m: RegExpExecArray | null;
+        DIGIT_SEQ.lastIndex = 0;
+        while ((m = DIGIT_SEQ.exec(text)) !== null) {
+          const start = m.index;
+          const end = start + m[0].length;
+          if (end > start) ranges.push({ start, end });
+        }
+        if (ranges.length === 0) return el;
+        // Filter out existing ranges that target only digits to avoid bloat
+        const existing = Array.isArray(el.styledRanges) ? el.styledRanges.slice() : [];
+        const filtered = existing.filter(r => {
+          const rs = Math.max(0, Math.min(text.length, r.start | 0));
+          const re = Math.max(rs, Math.min(text.length, r.end | 0));
+          if (re <= rs) return false;
+          const substr = text.slice(rs, re);
+          // If entirely digits, it’s likely from a previous apply — drop it
+          return !/^[\u0030-\u0039\u0660-\u0669\u06F0-\u06F9]+$/.test(substr);
+        });
+        const merged = filtered.concat(ranges.map(r => ({ start: r.start, end: r.end, fontSize: newSize })) as any);
+        return { ...el, styledRanges: merged } as any;
+      });
+      next[pageIdx] = updated;
+      return next;
+    });
+  }, []);
+
 const pageLabel = (idx: number) => {
   if (idx === PAGES.PERMIS_DETAILS) return 'Page 1';
  // if (idx === PAGES.COORDINATES) return 'Page 2';
@@ -3677,6 +3719,25 @@ const pageLabel = (idx: number) => {
             <button className={`${styles.toolButton} ${tool === 'rectangle' ? styles.active : ''}`} onClick={() => { setTool('rectangle'); handleAddElement('rectangle'); }} title="Add Rectangle (R)"><BsTextParagraph /></button>
             <button className={`${styles.toolButton} ${tool === 'line' ? styles.active : ''}`} onClick={() => { setTool('line'); handleAddElement('line'); }} title="Add Line (L)"><BsBorderWidth /></button>
           </div>
+          {currentPage === PAGES.ARTICLES && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label className={styles.pageLabel}>Chiffres (taille):</label>
+              <input
+                type="number"
+                min={8}
+                max={128}
+                value={page2DigitsFont}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value || '24');
+                  const clamped = Math.max(8, Math.min(128, isNaN(v) ? 24 : v));
+                  setPage2DigitsFont(clamped);
+                  applyDigitsFontSizeToPage2(clamped);
+                }}
+                style={{ width: 72, padding: '4px 6px' }}
+                title="Taille de police pour tous les chiffres de la page 2"
+              />
+            </div>
+          )}
           <div className={styles.pager}>
             <button className={styles.iconBtn} onClick={gotoPrev} disabled={!canPrev}>
               <FiChevronLeft />
