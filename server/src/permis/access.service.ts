@@ -298,4 +298,58 @@ export class AccessService {
       }
     }
   }
+
+  private async withExternalConnection<T>(
+    dbPath: string,
+    action: (ctx: { mode: 'odbc' | 'adodb'; connection: any }) => Promise<T>
+  ): Promise<T> {
+    if (!dbPath || !fs.existsSync(dbPath)) {
+      throw new Error(`External database not found: ${dbPath}`);
+    }
+    if (this.mode === 'odbc') {
+      const connString = `Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=${dbPath};Uid=Admin;Pwd=;`;
+      const conn = await odbc.connect(connString);
+      try {
+        return await action({ mode: 'odbc', connection: conn });
+      } finally {
+        try { await conn.close(); } catch {}
+      }
+    }
+    const externalConn = ADODB.open(
+      `Provider=${this.provider};Data Source=${dbPath};Persist Security Info=False;`,
+      this.useX64
+    );
+    try {
+      return await action({ mode: 'adodb', connection: externalConn });
+    } finally {
+      try { (externalConn as any)?.close?.(); } catch {}
+    }
+  }
+
+  async runExternalUpdate(dbPath: string, sql: string) {
+    await this.withExternalConnection(dbPath, async ({ mode, connection }) => {
+      try { console.log(`[ACCESS EXTERNAL UPDATE] mode=${mode} db=${dbPath} sql=${sql}`); } catch {}
+      if (mode === 'odbc') {
+        await connection.query(sql);
+        return;
+      }
+      await connection.query(sql);
+    });
+  }
+
+  async runExternalQuery(dbPath: string, sql: string): Promise<any[]> {
+    return this.withExternalConnection(dbPath, async ({ mode, connection }) => {
+      try { console.log(`[ACCESS EXTERNAL QUERY] mode=${mode} db=${dbPath} sql=${sql}`); } catch {}
+      if (mode === 'odbc') {
+        const result: any = await connection.query(sql);
+        if (Array.isArray(result)) return result;
+        if (result && typeof result === 'object' && Array.isArray(result.rows)) {
+          return result.rows;
+        }
+        return [];
+      }
+      const rows = await connection.query(sql);
+      return Array.isArray(rows) ? rows : rows ? [rows] : [];
+    });
+  }
 }

@@ -13,13 +13,23 @@ const ALLOWED_USERNAMES = new Set([
   'ANAM1358',
   'ANAM1405',
   'ANAM1113',
+  'ANAM1368',
+  'ANAM1408',
+'ANAM1383',
+'ANAM1393',
+'ANAM1421',
   'ANAM1206'
 ]);
 
 const CADASTRE_USERS = new Set([
   'ANAM1113',
   'ANAM1405',
-  'ANAM1206'
+  'ANAM1206',
+  'ANAM1368',
+  'ANAM1408',
+  'ANAM1383',
+  'ANAM1393',
+  'ANAM1421'
 ]);
 
 type Props = {

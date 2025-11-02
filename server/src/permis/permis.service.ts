@@ -17,6 +17,12 @@ const DEFAULT_TABLES = {
   typesProcedures: process.env.ACCESS_TABLE_TYPES_PROCEDURES || 'TypesProcedures'
 };
 
+const resolveCmasigDbPath = () =>
+  process.env.CMASIG_DB_PATH ||
+  process.env.ACCESS_CMASIG_DB_PATH ||
+  process.env.SECONDARY_ACCESS_DB_PATH ||
+  '';
+
 // Map Access column names to API fields expected by the client
 const DEFAULT_COLUMNS = {
   permis: {
@@ -88,6 +94,17 @@ const TYPE_OPTION_MAP: Record<string, string> = {
   PXC: 'TXC',
   ARM: 'AAM',
   ARC: 'AAC'
+};
+
+const CMASIG_LABEL_OVERRIDE: Record<string, string> = {
+  TXM: "Titres d'exploitation de mines TXM",
+  TXC: "Titres d'exploitation de carrières TXC",
+  TEM: "Titres d'exploitation de mines TEM",
+  TEC: "Titres d'exploitation de carrières TEC",
+  AAM: "Autorisation d'exploitation minière artisanale AAM",
+  AAC: "Autorisation d'exploitation de carrières AAC",
+  APM: "Autorisation de prospection minière APM",
+  ARM: "Autorisation de recherche minière ARM"
 };
 
 @Injectable()
@@ -209,13 +226,15 @@ export class PermisService {
     const takenDateCol = c.takenDate || 'date_remise_titre';
     const takenByCol = c.takenBy || 'nom_remise_titre';
 
+    const durationRaw = c.duree ? toStr(r[c.duree]) : '';
+
     const val: any = {
       id: r[c.id],
       typePermis: typeData || toStr(r[c.typePermis]),
       codeDemande: toStr(r[c.codeDemande]),
       detenteur: detNorm || toStr(r[c.detenteur]),
       superficie: toNum(r[c.superficie]),
-      duree: c.duree ? toStr(r[c.duree]) : '',
+      duree: durationRaw,
       // Localisation now prefers Wilaya; keep broad fallbacks for older schemas
       localisation: toStr(
         (r as any)[c.localisation] ??
@@ -251,6 +270,29 @@ export class PermisService {
       })(),
       takenBy: toStr((r as any)[takenByCol])
     };
+    if (!val.typePermis || typeof val.typePermis === 'string') {
+      val.typePermis = { lib_type: String(r[c.typePermis] ?? ''), duree_initiale: null };
+    } else {
+      val.typePermis.lib_type = String(val.typePermis.nom ?? val.typePermis.Nom ?? '');
+      val.typePermis.duree_initiale = Number(val.typePermis.validiteMaximale ?? val.typePermis.ValiditeMaximale ?? 0) || null;
+    }
+    const isDotString = (input: any) => typeof input === 'string' && /^\.{2,}$/.test(input.trim());
+    const durationFallback =
+      val.duree_display_ar ||
+      (val.typePermis && typeof val.typePermis === 'object' && val.typePermis.duree_initiale != null
+        ? String(val.typePermis.duree_initiale)
+        : '');
+    if (!val.duree || isDotString(val.duree)) {
+      val.duree = durationFallback || '';
+    }
+    if (!val.duree_display_ar || isDotString(val.duree_display_ar)) {
+      if (typeof val.duree === 'string' && val.duree.trim()) {
+        val.duree_display_ar = val.duree.trim();
+      } else if (typeof val.duree === 'number' && !Number.isNaN(val.duree) && val.duree > 0) {
+        val.duree_display_ar = `${val.duree} سنوات`;
+      }
+    }
+
     // Add compatibility fields expected by designer
     val.code_demande = val.codeDemande;
     val.id_demande = val.id;
@@ -278,12 +320,6 @@ export class PermisService {
           }
         }
       } catch {}
-    }
-    if (!val.typePermis || typeof val.typePermis === 'string') {
-      val.typePermis = { lib_type: String(r[c.typePermis] ?? ''), duree_initiale: null };
-    } else {
-      val.typePermis.lib_type = String(val.typePermis.nom ?? val.typePermis.Nom ?? '');
-      val.typePermis.duree_initiale = Number(val.typePermis.validiteMaximale ?? val.typePermis.ValiditeMaximale ?? 0) || null;
     }
     return val;
   }
@@ -540,8 +576,6 @@ export class PermisService {
     const fullCode = `${typeCode}${codeNum}`;
     const safeFull = this.access.escapeValue(fullCode);
     const safeFullUpper = this.access.escapeValue(fullCode.toUpperCase());
-    const likeSuffix = this.access.escapeValue(`%${codeNum}`);
-    const likePadSuffix = this.access.escapeValue(`%${pad5}`);
     const numN = Number(codeNum);
     const typeCond = /^\d+$/.test(String(typeId)) ? String(typeId) : this.access.escapeValue(String(typeId));
     // Try with both padded and raw numeric/text comparisons
@@ -561,11 +595,6 @@ export class PermisService {
     if (!rows || !rows.length) {
       const sqlFull = `SELECT TOP 1 * FROM ${t} WHERE ${c.typePermis} = ${typeCond} AND (UCase(${c.codeDemande}) = ${safeFullUpper})`;
       try { rows = await this.access.query(sqlFull); } catch {}
-    }
-    // Attempt 4: match codes that end with the numeric part (e.g., PEC236 -> 7236)
-    if (!rows || !rows.length) {
-      const sqlLike = `SELECT TOP 1 * FROM ${t} WHERE ${c.typePermis} = ${typeCond} AND (${c.codeDemande} LIKE ${likeSuffix} OR ${c.codeDemande} LIKE ${likePadSuffix}) ORDER BY ${c.codeDemande}`;
-      try { rows = await this.access.query(sqlLike); } catch {}
     }
     if (!rows || !rows.length) return null;
     const idVal = rows[0]?.[c.id] ?? rows[0]?.id;
@@ -986,6 +1015,203 @@ export class PermisService {
       await this.updateDroitsEtablForOption(String(id), sourceCode, targetType.code || targetCode, optionYear);
     } catch (err) {
       try { this.logger.warn(`[optPermisType] update DroitsEtabl warning: ${(err as any)?.message || err}`); } catch {}
+    }
+    const cmasigPath = resolveCmasigDbPath();
+    if (cmasigPath) {
+      const expectedCode = ((targetType.code ?? targetCode ?? '') as string).toString().trim() || targetCode;
+      const codeLiteral = this.access.escapeValue(expectedCode);
+      const rawTypeNameOriginal = (targetType.nom ?? '').toString().trim();
+      const sanitize = (value: string) =>
+        value
+          .replace(/[\u2019\u2018\u201B\u0060\u00B4]/g, "'")
+          .replace(/\s+/g, ' ')
+          .trim();
+      const overrideName = CMASIG_LABEL_OVERRIDE[expectedCode]
+        ? sanitize(CMASIG_LABEL_OVERRIDE[expectedCode])
+        : '';
+      const baseTypeName = sanitize(rawTypeNameOriginal);
+      const pluralizedBase =
+        baseTypeName && /^titre\b/i.test(baseTypeName)
+          ? baseTypeName.replace(/^titre\b/i, 'Titres')
+          : baseTypeName;
+      const appendedName =
+        pluralizedBase && !pluralizedBase.toUpperCase().includes(expectedCode.toUpperCase())
+          ? sanitize(`${pluralizedBase} ${expectedCode}`)
+          : pluralizedBase;
+      const typeNameCandidates = Array.from(
+        new Set([overrideName, appendedName, pluralizedBase, baseTypeName].filter(Boolean))
+      );
+      if (!typeNameCandidates.length) {
+        typeNameCandidates.push(`Titres ${expectedCode}`.trim());
+      }
+      const preferredName = typeNameCandidates[0];
+      const alternateTypeNames = typeNameCandidates.slice(1);
+      const verificationCandidates = Array.from(
+        new Set([...typeNameCandidates, expectedCode].filter(Boolean))
+      );
+      const permitCode = (permit[c.codeDemande] ?? permit.Code ?? permit.code ?? '').toString().trim();
+      const idValue = String(id ?? '').trim();
+      const idLiteral = /^\d+$/.test(idValue) ? idValue : this.access.escapeValue(idValue);
+      try {
+        this.logger.log(
+          `[optPermisType] CMASIG target payload => path=${cmasigPath}, code=${expectedCode}, typeNames=${JSON.stringify(
+            typeNameCandidates
+          )}, verifyNames=${JSON.stringify(verificationCandidates)}, permitCode=${permitCode}, id=${idValue}`
+        );
+      } catch {}
+      const whereCandidates = new Set<string>();
+      if (permitCode) {
+        whereCandidates.add(`[Code] = ${this.access.escapeValue(permitCode)}`);
+      }
+      if (idValue) {
+        ['[id]', '[Id]', '[ID]'].forEach((col) => whereCandidates.add(`${col} = ${idLiteral}`));
+        ['[idTitre]', '[IdTitre]', '[IDTitre]'].forEach((col) => whereCandidates.add(`${col} = ${idLiteral}`));
+      }
+      if (!whereCandidates.size) {
+        try { this.logger.warn('[optPermisType] CMASIG update skipped (no lookup key) for permit id ' + id); } catch {}
+      } else {
+        try {
+          this.logger.log(`[optPermisType] CMASIG where candidates => ${Array.from(whereCandidates).join(' || ')}`);
+        } catch {}
+        const normalize = (value: string) =>
+          value
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/['\u2019]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toUpperCase();
+
+        let connectionOk = false;
+        try {
+          await this.access.runExternalQuery(cmasigPath, 'SELECT TOP 1 [CodeType] FROM Titres');
+          connectionOk = true;
+          try { this.logger.log('[optPermisType] CMASIG connection successful'); } catch {}
+        } catch (err) {
+          try { this.logger.warn(`[optPermisType] CMASIG connection warning: ${(err as any)?.message || err}`); } catch {}
+        }
+
+        const matchedWhere: string[] = [];
+        if (connectionOk) {
+          for (const where of whereCandidates) {
+            try {
+              const rows = await this.access.runExternalQuery(
+                cmasigPath,
+                `SELECT TOP 1 [idTitre], [Code], [CodeType], [TypeTitre] FROM Titres WHERE ${where}`
+              );
+              if (rows && rows.length) {
+                matchedWhere.push(where);
+                try {
+                  this.logger.log(
+                    `[optPermisType] CMASIG lookup match => where=${where}, sample=${JSON.stringify(rows[0])}`
+                  );
+                } catch {}
+              } else {
+                try { this.logger.log(`[optPermisType] CMASIG lookup empty => where=${where}`); } catch {}
+              }
+            } catch (err) {
+              try { this.logger.warn(`[optPermisType] CMASIG lookup warning (${where}): ${(err as any)?.message || err}`); } catch {}
+            }
+          }
+        }
+
+        const typeColumns = ['[TypeTitre]', '[Type Titre]'];
+        const updateSet = new Set<string>();
+        const updates: string[] = [];
+        const targetWhere = matchedWhere.length ? matchedWhere : Array.from(whereCandidates);
+        for (const where of targetWhere) {
+          for (const nameCandidate of alternateTypeNames) {
+            const nameLiteral = this.access.escapeValue(nameCandidate);
+            for (const typeCol of typeColumns) {
+              const sql = `UPDATE Titres SET [CodeType] = ${codeLiteral}, ${typeCol} = ${nameLiteral} WHERE ${where}`;
+              if (!updateSet.has(sql)) {
+                updates.push(sql);
+                updateSet.add(sql);
+                try { this.logger.log(`[optPermisType] CMASIG queue update => ${sql}`); } catch {}
+              }
+            }
+          }
+          if (preferredName) {
+            const preferredLiteral = this.access.escapeValue(preferredName);
+            for (const typeCol of typeColumns) {
+              const sql = `UPDATE Titres SET [CodeType] = ${codeLiteral}, ${typeCol} = ${preferredLiteral} WHERE ${where}`;
+              if (!updateSet.has(sql)) {
+                updates.push(sql);
+                updateSet.add(sql);
+                try { this.logger.log(`[optPermisType] CMASIG queue update => ${sql}`); } catch {}
+              }
+            }
+          }
+          const codeOnlySql = `UPDATE Titres SET [CodeType] = ${codeLiteral} WHERE ${where}`;
+          if (!updateSet.has(codeOnlySql)) {
+            updates.push(codeOnlySql);
+            updateSet.add(codeOnlySql);
+            try { this.logger.log(`[optPermisType] CMASIG queue update => ${codeOnlySql}`); } catch {}
+          }
+        }
+
+        let executedSecondary = false;
+        for (const sql of updates) {
+          if (!sql) continue;
+          try {
+            await this.access.runExternalUpdate(cmasigPath, sql);
+            executedSecondary = true;
+            try { this.logger.log(`[optPermisType] CMASIG update executed => ${sql}`); } catch {}
+          } catch (err) {
+            try { this.logger.warn(`[optPermisType] CMASIG update warning (${sql}): ${(err as any)?.message || err}`); } catch {}
+          }
+        }
+        try {
+          this.logger.log(
+            `[optPermisType] CMASIG execution summary => executed=${executedSecondary}, updates=${updates.length}`
+          );
+        } catch {}
+
+        let verifiedSecondary = false;
+        if (connectionOk && targetWhere.length) {
+          for (const where of targetWhere) {
+            try {
+              const rows = await this.access.runExternalQuery(
+                cmasigPath,
+                `SELECT TOP 1 [CodeType], [TypeTitre] FROM Titres WHERE ${where}`
+              );
+              if (!rows || !rows.length) continue;
+              const row = rows[0] as Record<string, any>;
+              const codeMatch = normalize(String(row.CodeType ?? '')) === normalize(expectedCode);
+              const typeValue = String(row.TypeTitre ?? '').trim();
+              const normalizedType = normalize(typeValue);
+              if (codeMatch && verificationCandidates.some((candidate) => normalize(candidate) === normalizedType)) {
+                verifiedSecondary = true;
+                try {
+                  this.logger.log(
+                    `[optPermisType] CMASIG verification ok => where=${where}, code=${row.CodeType}, type=${typeValue}`
+                  );
+                } catch {}
+                break;
+              }
+              try {
+                this.logger.log(
+                  `[optPermisType] CMASIG verification mismatch => where=${where}, code=${row.CodeType}, type=${typeValue}`
+                );
+              } catch {}
+            } catch (err) {
+              try { this.logger.warn(`[optPermisType] CMASIG verification warning (${where}): ${(err as any)?.message || err}`); } catch {}
+            }
+          }
+        } else if (executedSecondary && !connectionOk) {
+          // If we could not validate but the updates ran without connection errors, accept best-effort
+          verifiedSecondary = true;
+        }
+        try {
+          this.logger.log(
+            `[optPermisType] CMASIG verification summary => verified=${verifiedSecondary}, connectionOk=${connectionOk}`
+          );
+        } catch {}
+
+        if (!executedSecondary || !verifiedSecondary) {
+          try { this.logger.warn('[optPermisType] CMASIG update failed for permit id ' + id); } catch {}
+        }
+      }
     }
 
     return {

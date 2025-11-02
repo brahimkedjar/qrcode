@@ -54,6 +54,63 @@ interface QRCodeData {
 type PermisPages = PermisElement[][];
 
 const COORDINATE_COLUMN_KEYS = ['x', 'y', 'point'];
+const LAYOUT_KEYS: (keyof PermisElement)[] = [
+  'x',
+  'y',
+  'width',
+  'height',
+  'rotation',
+  'scaleX',
+  'scaleY',
+  'points',
+  'canvasWidth',
+  'pageLeftMargin',
+  'pageRightMargin',
+  'pageTopMargin',
+  'pageBottomMargin',
+  'colWidths',
+  'rowHeight',
+  'rowsPerCol',
+  'blockCols'
+];
+
+const safeClone = <T,>(value: T): T => {
+  const globalAny = globalThis as any;
+  if (globalAny && typeof globalAny.structuredClone === 'function') {
+    try {
+      return globalAny.structuredClone(value);
+    } catch {}
+  }
+  return JSON.parse(JSON.stringify(value));
+};
+
+const deriveArticleIdFromMeta = (meta: any): string | null => {
+  if (!meta) return null;
+  if (typeof meta.articleId === 'string' && meta.articleId.trim()) {
+    return meta.articleId.trim();
+  }
+  const group = typeof meta.articleGroup === 'string' ? meta.articleGroup.trim() : '';
+  if (group) {
+    const cleaned = group
+      .replace(/^article[_-]/i, '')
+      .replace(/_underline$/i, '')
+      .trim();
+    if (cleaned) return cleaned;
+  }
+  return null;
+};
+
+const estimateTextHeight = (
+  text: string,
+  width: number,
+  fontSize: number,
+  lineHeight: number
+): number => {
+  const avgCharWidth = fontSize * 0.52;
+  const charsPerLine = Math.max(1, Math.floor(width / avgCharWidth));
+  const lines = Math.ceil(Math.max(1, text.length) / charsPerLine);
+  return Math.ceil(lines * fontSize * lineHeight);
+};
 
 const isCoordinateTableElement = (element: PermisElement): boolean => {
   if (!element || element.type !== 'table') return false;
@@ -383,6 +440,36 @@ const isCoordinateTableElement = (element: PermisElement): boolean => {
   const overlayDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
   const initialPagesRef = useRef<PermisPages | null>(null);
   const initialDataRef = useRef<any>(null);
+  const articleRelayoutRef = useRef<((ids: string[], source: ArticleItem[], overrides?: Map<string, PermisElement[]>) => void) | null>(null);
+  const captureArticleOverrides = useCallback((pagesSnapshot: PermisPages, articleOrder: string[]) => {
+    const overrides = new Map<string, PermisElement[]>();
+    const remainingOrder = [...articleOrder];
+    pagesSnapshot.forEach(page => {
+      if (!Array.isArray(page)) return;
+      let lastArticleId: string | null = null;
+      page.forEach(el => {
+        if (!el) return;
+        const meta = (el as any).meta || {};
+        let articleId = deriveArticleIdFromMeta(meta);
+        if (!articleId && (meta.isArticle || (el as any).isArticle)) {
+          if (el.type === 'text' && remainingOrder.length) {
+            articleId = remainingOrder.shift() || null;
+            lastArticleId = articleId;
+          } else if (lastArticleId) {
+            articleId = lastArticleId;
+          }
+        } else if (articleId) {
+          lastArticleId = articleId;
+        }
+        if (!articleId) return;
+        const cloned = safeClone(el);
+        const existing = overrides.get(articleId) || [];
+        existing.push(cloned);
+        overrides.set(articleId, existing);
+      });
+    });
+    return overrides;
+  }, []);
   // Ensure color inputs always receive #rrggbb to avoid browser warnings
   const normalizeHexColor = (val: any, fallback = '#000000') => {
     try {
@@ -586,6 +673,12 @@ const isCoordinateTableElement = (element: PermisElement): boolean => {
       toast.error('Default layout not available yet');
       return;
     }
+    const articleIdsSnapshot = [...selectedArticleIds];
+    const articleLookup = new Map(articles.map(item => [item.id, item]));
+    const articleOverrides = captureArticleOverrides(pages, articleIdsSnapshot);
+    const articleSource = articleIdsSnapshot
+      .map(id => articleLookup.get(id))
+      .filter((item): item is ArticleItem => Boolean(item));
     const layoutKeys: (keyof PermisElement)[] = [
       'x',
       'y',
@@ -605,21 +698,101 @@ const isCoordinateTableElement = (element: PermisElement): boolean => {
       'rowsPerCol',
       'blockCols'
     ];
+    const applyArticleOverridesToPages = (pagesInput: PermisPages): PermisPages => {
+      if (!articleOverrides || articleOverrides.size === 0) return pagesInput;
+      let pagesChanged = false;
+      const nextPages = pagesInput.map((page, pageIndex) => {
+        if (!Array.isArray(page) || pageIndex < PAGES.ARTICLES) return page;
+        let pageChanged = false;
+        const nextPage = page.map(el => {
+          if (!el) return el;
+          const meta = (el as any).meta || {};
+          const isArticle = meta.isArticle || (el as any).isArticle;
+          if (!isArticle) return el;
+          const articleId = deriveArticleIdFromMeta(meta);
+          if (!articleId) return el;
+          const overrideList = articleOverrides.get(articleId);
+          if (!overrideList || overrideList.length === 0) return el;
+          const groupKey =
+            meta.articleGroup ||
+            (el as any).articleGroup ||
+            el.id;
+          let match = overrideList.find(ov => {
+            const ovMeta = (ov as any).meta || {};
+            const ovGroup = ovMeta.articleGroup || (ov as any).articleGroup || ov.id;
+            return groupKey && ovGroup && groupKey === ovGroup;
+          });
+          if (!match) {
+            match = overrideList.find(ov => ov.id === el.id);
+          }
+          if (!match) {
+            match = overrideList[0];
+          }
+          if (!match) return el;
+          const preserved: any = { ...match };
+          delete preserved.id;
+          layoutKeys.forEach(key => {
+            if (key in preserved) delete preserved[key];
+          });
+          if (preserved.meta) {
+            const preservedMeta = { ...preserved.meta };
+            delete preservedMeta.pageIndex;
+            preserved.meta = { ...(el.meta || {}), ...preservedMeta };
+          }
+          pageChanged = true;
+          return { ...el, ...preserved };
+        });
+        if (pageChanged) {
+          pagesChanged = true;
+          return nextPage;
+        }
+        return page;
+      });
+      return pagesChanged ? nextPages : pagesInput;
+    };
     let nextSnapshot: PermisPages | null = null;
     setPages(prev => {
       const maxPages = Math.max(prev.length, baseSnapshot.length);
       const merged: PermisPages = [];
       for (let pageIndex = 0; pageIndex < maxPages; pageIndex++) {
         const currentPage = [...(prev[pageIndex] || [])];
-        const snapshotPage = baseSnapshot[pageIndex] ? baseSnapshot[pageIndex].map(el => ({ ...el })) : [];
+        const snapshotPage = baseSnapshot[pageIndex]
+          ? baseSnapshot[pageIndex].map(el => ({ ...el }))
+          : [];
         const snapMap = new Map(snapshotPage.map(el => [el.id, el]));
+        const snapGroupMap = new Map<string, PermisElement>();
+        snapshotPage.forEach(snapEl => {
+          const gk = (snapEl as any)?.meta?.articleGroup || (snapEl as any).articleGroup;
+          if (gk && !snapGroupMap.has(gk)) {
+            snapGroupMap.set(gk, snapEl);
+          }
+        });
         const used = new Set<string>();
-        const updated = currentPage.map(el => {
-          const snap = snapMap.get(el.id);
-          if (!snap) return el;
-          used.add(el.id);
+        const updated: PermisElement[] = [];
+        currentPage.forEach(el => {
+          const meta = (el as any)?.meta || {};
+          let snap = snapMap.get(el.id);
+          if (!snap) {
+            const groupKey = meta.articleGroup || (el as any).articleGroup;
+            if (groupKey) {
+              const byGroup = snapGroupMap.get(groupKey);
+              if (byGroup) {
+                snap = byGroup;
+              }
+            }
+          }
+          if (!snap) {
+            updated.push(el);
+            return;
+          }
+          used.add(snap.id);
+          const snapGroupKey = (snap as any)?.meta?.articleGroup || (snap as any).articleGroup;
+          if (snapGroupKey) {
+            snapGroupMap.delete(snapGroupKey);
+          }
           if (snap.meta?.isBorder) {
-            return { ...snap };
+            updated.push({ ...snap });
+            return;
           }
           const nextEl: PermisElement = { ...el };
           layoutKeys.forEach(key => {
@@ -639,7 +812,7 @@ const isCoordinateTableElement = (element: PermisElement): boolean => {
           if (snap.meta) {
             nextEl.meta = { ...(nextEl.meta || {}), ...snap.meta };
           }
-          return nextEl;
+          updated.push(nextEl);
         });
         snapshotPage.forEach(snapEl => {
           if (!used.has(snapEl.id)) {
@@ -648,16 +821,27 @@ const isCoordinateTableElement = (element: PermisElement): boolean => {
         });
         merged[pageIndex] = updated;
       }
-      nextSnapshot = merged;
-      return merged;
+      const trimmed = merged.slice(0, Math.max(maxPages, 1));
+      const withOverrides = applyArticleOverridesToPages(trimmed);
+      nextSnapshot = withOverrides;
+      return withOverrides;
     });
-    if (nextSnapshot) {
+    const shouldReflowArticles =
+      !!articleRelayoutRef.current &&
+      articleIdsSnapshot.length > 0 &&
+      articleSource.length > 0;
+    if (shouldReflowArticles && articleRelayoutRef.current) {
+      const handler = articleRelayoutRef.current;
+      const idsForRelayout = [...articleIdsSnapshot];
+      const sourceForRelayout = articleSource.slice();
+      setTimeout(() => handler?.(idsForRelayout, sourceForRelayout, articleOverrides), 0);
+    } else if (nextSnapshot) {
       pushHistory(JSON.parse(JSON.stringify(nextSnapshot)) as PermisPages);
     }
     setSelectedIds([]);
     setTextOverlay(null);
     toast.success('Layout positions restored');
-  }, [pushHistory]);
+  }, [pushHistory, selectedArticleIds, articles, pages, captureArticleOverrides]);
 
   const handleResizeCanvas = useCallback((direction: 'width' | 'height', amount: number) => {
     setCanvasSizes(prev => {
@@ -816,7 +1000,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
   }, [templates, savedPermisId, apiURL]);
 
  
- const insertArticlesAsElements = useCallback((articleIds: string[], source: ArticleItem[]) => {
+ const insertArticlesAsElements = useCallback((articleIds: string[], source: ArticleItem[], overrides?: Map<string, PermisElement[]>) => {
   // Single-column layout with automatic pagination
   const isTXC = (selectedArticleSet || '').toLowerCase().includes('txc');
   let marginX = isTXC ? 24 : 40;
@@ -825,6 +1009,36 @@ function createCornerDecorations(color: string, width: number, height: number): 
   let decisionGap = isTXC ? 6 : 10;
   let startY = isTXC ? 24 : 40;
   const bottomMargin = 20;
+
+  const elementHeightEstimate = (element: PermisElement, availableWidth: number) => {
+    if (typeof element?.height === 'number' && element.height > 0) {
+      return element.height;
+    }
+    if (element?.type === 'text') {
+      const fontSize = (element.fontSize || (isTXC ? 18 : 24));
+      const lineH = element.lineHeight || (isTXC ? 1.3 : 1.7);
+      const width = Math.max(10, element.width || availableWidth);
+      const text = String((element as any).text || '');
+      return estimateTextHeight(text, width, fontSize, lineH);
+    }
+    if (element?.type === 'line') return element.height || 2;
+    return 0;
+  };
+
+  const computeBlockMetrics = (elements: PermisElement[], availableWidth: number) => {
+    let minY = Infinity;
+    let maxBottom = -Infinity;
+    elements.forEach(el => {
+      if (!el) return;
+      const y = el.y ?? 0;
+      if (y < minY) minY = y;
+      const h = elementHeightEstimate(el, availableWidth);
+      if ((y + h) > maxBottom) maxBottom = y + h;
+    });
+    if (!Number.isFinite(minY)) minY = 0;
+    if (!Number.isFinite(maxBottom)) maxBottom = minY;
+    return { minY, blockHeight: Math.max(0, maxBottom - minY) };
+  };
 
   // Helper to get size for a given absolute page index
   const getSize = (absIndex: number) =>
@@ -951,10 +1165,51 @@ function createCornerDecorations(color: string, width: number, height: number): 
       ? articleIds.slice(decisionIdx + 1).filter(id => idToItem.has(id))
       : articleIds.filter(id => idToItem.has(id));
 
-    const baseFont = 28;
+    const baseFont = 25;
     const baseLH = isTXC ? 1.3 : 1.6;
     let yCursor = startY;
     const builtIntro: PermisElement[] = [];
+    const cloneValue = (value: any): any => {
+      if (Array.isArray(value)) return value.map(item => cloneValue(item));
+      if (value && typeof value === 'object') return { ...value };
+      return value;
+    };
+    const mergeArticleOverride = (
+      baseEl: PermisElement,
+      articleId: string,
+      groupFallback: string
+    ): PermisElement => {
+      const list = overrides?.get(articleId);
+      if (!list || list.length === 0) return baseEl;
+      const baseGroup = groupFallback;
+      let match = list.find(ov => {
+        const meta = (ov as any).meta || {};
+        const grp = meta.articleGroup || (ov as any).articleGroup;
+        return grp === baseGroup;
+      });
+      if (!match) {
+        match = list.find(ov => (ov as any).meta?.articleId === articleId) || list[0];
+      }
+      if (!match) return baseEl;
+      const merged: PermisElement = { ...baseEl };
+      if (match.id) merged.id = match.id;
+      Object.entries(match).forEach(([key, val]) => {
+        if (key === 'id') return;
+        if ((LAYOUT_KEYS as readonly string[]).includes(key)) return;
+        if (key === 'meta') return;
+        (merged as any)[key] = cloneValue(val);
+      });
+      const mergedMeta = {
+        ...(merged.meta || {}),
+        ...cloneValue((match as any).meta || {})
+      };
+      mergedMeta.articleGroup = baseGroup;
+      mergedMeta.articleId = articleId;
+      mergedMeta.pageIndex = baseEl.meta?.pageIndex ?? PAGES.ARTICLES;
+      mergedMeta.isArticle = true;
+      merged.meta = mergedMeta;
+      return merged;
+    };
     // Prepare dynamic substitutions (hoisted before intro processing)
     const beneficiaryText = [statutJuridique, holderDisplay].filter(Boolean).join(' ');
     const expDate = String((initialData as any)?.date_expiration_fr || '').trim();
@@ -984,6 +1239,8 @@ function createCornerDecorations(color: string, width: number, height: number): 
     const wilayaStr = String((initialData as any)?.wilaya || (initialData as any)?.localisation || '').trim();
     // Build intro items (before decision)
   beforeIds.forEach((id, i) => {
+    const isLastBefore = i === beforeIds.length - 1;
+    const gap = isLastBefore ? 0 : (isTXC ? 4 : 6);
     const el = idToItem.get(id)!;
     const title = (el.title || '').trim();
     const hasColon = /[:ï¼š]$/.test(title);
@@ -1016,11 +1273,30 @@ function createCornerDecorations(color: string, width: number, height: number): 
     if (dairaStr) combined = combined.replace(/(\u062F\u0627\u0626\u0631\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${dairaStr}`);
     if (wilayaStr) combined = combined.replace(/(\u0648\u0644\u0627\u064A\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${wilayaStr}`);
 
-    const h = wrapH(combined, contentWidth - padding * 2, baseFont, 'Arabic Typesetting', baseLH);
-    builtIntro.push({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: contentWidth - padding * 2, text: combined, language: 'ar', direction: 'rtl', fontSize: baseFont, fontFamily: 'Arabic Typesetting', color: '#000', draggable: true, textAlign: 'right', opacity: 1, rotation: 0, wrap: 'word', lineHeight: baseLH, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any);
-    // Place decision header directly after last intro block (no extra gap)
-    const isLastBefore = i === beforeIds.length - 1;
-    const gap = isLastBefore ? 0 : (isTXC ? 4 : 6);
+    const h = wrapH(combined, contentWidth - padding * 2, baseFont, 'Traditional Arabic', baseLH);
+    const groupName = `article_${id}`;
+    let baseEl: PermisElement = {
+      id: uuidv4(),
+      type: 'text',
+      x: marginX + padding,
+      y: yCursor,
+      width: contentWidth - padding * 2,
+      text: combined,
+      language: 'ar',
+      direction: 'rtl',
+      fontSize: baseFont,
+      fontFamily: 'Traditional Arabic',
+      color: '#000',
+      draggable: true,
+      textAlign: 'right',
+      opacity: 1,
+      rotation: 0,
+      wrap: 'word',
+      lineHeight: baseLH,
+      meta: { isArticle: true, pageIndex: PAGES.ARTICLES, articleId: id, articleGroup: groupName }
+    } as any;
+    baseEl = mergeArticleOverride(baseEl, id, groupName);
+    builtIntro.push(baseEl);
     yCursor += h + gap;
   });
 
@@ -1030,93 +1306,131 @@ function createCornerDecorations(color: string, width: number, height: number): 
       const text = (decisionItem.title || '').trim() || 'يــقــرر مــا يــلــي :';
       const fz = Math.max(baseFont + 4, 20);
       const lh = 1.2;
-      const h = wrapH(text, contentWidth - padding * 2, fz, 'Arabic Typesetting', lh);
-      builtIntro.push({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: contentWidth - padding * 2, text, language: 'ar', direction: 'rtl', fontSize: fz, fontFamily: 'Arabic Typesetting', color: '#000', draggable: true, textAlign: 'center', opacity: 1, rotation: 0, wrap: 'word', lineHeight: lh, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any);
+      const h = wrapH(text, contentWidth - padding * 2, fz, 'Traditional Arabic', lh);
+      let baseEl: PermisElement = {
+        id: uuidv4(),
+        type: 'text',
+        x: marginX + padding,
+        y: yCursor,
+        width: contentWidth - padding * 2,
+        text,
+        language: 'ar',
+        direction: 'rtl',
+        fontSize: fz,
+        fontFamily: 'Traditional Arabic',
+        color: '#000',
+        draggable: true,
+        textAlign: 'center',
+        opacity: 1,
+        rotation: 0,
+        wrap: 'word',
+        lineHeight: lh,
+        meta: { isArticle: true, pageIndex: PAGES.ARTICLES, articleId: 'decision', articleGroup: 'article_decision_header' }
+      } as any;
+      baseEl = mergeArticleOverride(baseEl, 'decision', 'article_decision_header');
+      builtIntro.push(baseEl);
       // No extra gap below the decision header
-      yCursor += h + 0;
+      yCursor += h;
     }
 
     // Combined block after decision
-    let combinedText = '';
-    const styledRanges: any[] = [];
-    let acc = 0;
+    let combinedBlock: PermisElement[] = [];
+    {
+      let combinedText = '';
+      const styledRanges: any[] = [];
+      let acc = 0;
 
-    afterIds.forEach((id, idx) => {
-      const el = idToItem.get(id)!;
-      const title = (el.title || '').trim();
-      const hasColon = /[:ï¼š]$/.test(title);
-      const titlePrefix = title ? (hasColon ? title : `${title} :`) : '';
-      let piece = [titlePrefix, el.content || ''].filter(Boolean).join(' ');
-      // Replace generic dotted beneficiary placeholder: يمنح .......... -> يمنح <beneficiaryText>
-      if (beneficiaryText) {
-        piece = piece.replace(/(\u064A\u0645\u0646\u062D)\s*[\.\u2026_]{2,}/gu, (_m, g1) => `${g1} ${beneficiaryText}`);
-      }
-      // Replace expiration date placeholder after "إلى غاية" like ../../....
-      if (expDate) {
-        piece = piece.replace(/(\u0625\u0644\u0649\s+\u063A\u0627\u064A\u0629)\s*[\.\/\-\u2026]{2,}/gu, (_m, g1) => `${g1} ${expDate}`);
-      }
-      // Replace registered/on date placeholders: only fill "المسجل بتاريخ …" and
-      // for "المؤرخ في …" only when referring to the mining title line containing "سند/السند"
-      if (octroiDate) {
-        piece = piece.replace(/(\u0627\u0644\u0645\u0633\u062C[\u064B-\u0652]?\u0644\s+\u0628\u062A\u0627\u0631\u064A\u062E)\s*[:\u061B\u003A\uFE55]?\s*[\.\/\-\u2026]{2,}/gu, (_m, g1) => `${g1} ${octroiDate}`);
-        if (/\u0633\u0646\u062F|\u0627\u0644\u0633\u0646\u062F/.test(piece)) {
-          piece = piece.replace(/(\u0627\u0644\u0645\u0624\u0631\u062E(?:\u0629)?\s+\u0641\u064A)\s*[:\u061B\u003A\uFE55]?\s*[\.\/\-\u2026]{2,}/gu, (_m, g1) => `${g1} ${octroiDate}`);
+      afterIds.forEach((id, idx) => {
+        const el = idToItem.get(id)!;
+        const title = (el.title || '').trim();
+        const hasColon = /[:ï¼š]$/.test(title);
+        const titlePrefix = title ? (hasColon ? title : `${title} :`) : '';
+        let piece = [titlePrefix, el.content || ''].filter(Boolean).join(' ');
+        if (beneficiaryText) {
+          piece = piece.replace(/(\u064A\u0645\u0646\u062D)\s*[\.\u2026_]{2,}/gu, (_m, g1) => `${g1} ${beneficiaryText}`);
         }
-      }
-      // Replace material placeholder: "لمادة ...." or "المادة ...." with substance
-      if (substance) {
-        piece = piece.replace(/(\u0644\u0645\u0627\u062F\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${substance}`);
-        piece = piece.replace(/(\u0627\u0644\u0645\u0627\u062F\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${substance}`);
-      }
-      // Replace location placeholders in the long phrase
-      if (lieuDitStr) {
-        piece = piece.replace(/(\u0627\u0644\u0645\u0633\u0645\u0649)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${lieuDitStr}`);
-      }
-      if (communeStr) {
-        piece = piece.replace(/(\u0628\u0644\u062F\u064A\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${communeStr}`);
-      }
-      if (dairaStr) {
-        piece = piece.replace(/(\u062F\u0627\u0626\u0631\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${dairaStr}`);
-      }
-      if (wilayaStr) {
-        piece = piece.replace(/(\u0648\u0644\u0627\u064A\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${wilayaStr}`);
-      }
-      // Replace area placeholder: "تقدر المساحة الممنوحة بـ .."
-      if (String((initialData as any)?.superficie || '').trim()) {
-        const supStr = `${(initialData as any)?.superficie} `;
-        piece = piece.replace(/(\u062A\u0642\u062F\u0631\s+\u0627\u0644\u0645\u0633\u0627\u062D\u0629\s+\u0627\u0644\u0645\u0645\u0646\u0648\u062D\u0629\s+\u0628\u0640)\s*[\.\u2026]{1,}/gu, (_m, g1) => `${g1} ${supStr}`);
-      }
-      const prepend = (idx === 0) ? '' : '\n';
-      combinedText += prepend + piece;
-      if (titlePrefix) {
-        const start = acc + (prepend ? 1 : 0);
-        const end = start + titlePrefix.length;
-        // Keep title bold only; avoid text underline to prevent gaps between Arabic and Latin glyphs.
-        styledRanges.push({ start, end, fontWeight: 'bold', underline: true });
-      }
-      acc = combinedText.length;
-    });
+        if (expDate) {
+          piece = piece.replace(/(\u0625\u0644\u0649\s+\u063A\u0627\u064A\u0629)\s*[\.\/\-\u2026]{2,}/gu, (_m, g1) => `${g1} ${expDate}`);
+        }
+        if (octroiDate) {
+          piece = piece.replace(/(\u0627\u0644\u0645\u0633\u062C[\u064B-\u0652]?\u0644\s+\u0628\u062A\u0627\u0631\u064A\u062E)\s*[:\u061B\u003A\uFE55]?\s*[\.\/\-\u2026]{2,}/gu, (_m, g1) => `${g1} ${octroiDate}`);
+          if (/\u0633\u0646\u062F|\u0627\u0644\u0633\u0646\u062F/.test(piece)) {
+            piece = piece.replace(/(\u0627\u0644\u0645\u0624\u0631\u062E(?:\u0629)?\s+\u0641\u064A)\s*[:\u061B\u003A\uFE55]?\s*[\.\/\-\u2026]{2,}/gu, (_m, g1) => `${g1} ${octroiDate}`);
+          }
+        }
+        if (substance) {
+          piece = piece.replace(/(\u0644\u0645\u0627\u062F\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${substance}`);
+          piece = piece.replace(/(\u0627\u0644\u0645\u0627\u062F\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${substance}`);
+        }
+        if (lieuDitStr) {
+          piece = piece.replace(/(\u0627\u0644\u0645\u0633\u0645\u0649)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${lieuDitStr}`);
+        }
+        if (communeStr) {
+          piece = piece.replace(/(\u0628\u0644\u062F\u064A\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${communeStr}`);
+        }
+        if (dairaStr) {
+          piece = piece.replace(/(\u062F\u0627\u0626\u0631\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${dairaStr}`);
+        }
+        if (wilayaStr) {
+          piece = piece.replace(/(\u0648\u0644\u0627\u064A\u0629)\s*[\.\u2026]{2,}/gu, (_m, g1) => `${g1} ${wilayaStr}`);
+        }
+        if (String((initialData as any)?.superficie || '').trim()) {
+          const supStr = `${(initialData as any)?.superficie} `;
+          piece = piece.replace(/(\u062A\u0642\u062F\u0631\s+\u0627\u0644\u0645\u0633\u0627\u062D\u0629\s+\u0627\u0644\u0645\u0645\u0646\u0648\u062D\u0629\s+\u0628\u0640)\s*[\.\u2026]{1,}/gu, (_m, g1) => `${g1} ${supStr}`);
+        }
+        const prepend = (idx === 0) ? '' : '\n';
+        combinedText += prepend + piece;
+        if (titlePrefix) {
+          const start = acc + (prepend ? 1 : 0);
+          const end = start + titlePrefix.length;
+          styledRanges.push({ start, end, fontWeight: 'bold', underline: true });
+        }
+        acc = combinedText.length;
+      });
 
-    const combinedH = wrapH(combinedText, contentWidth - padding * 2, baseFont, ARABIC_FONTS[0], baseLH);
-    const footerReserve = 110; // slightly smaller to avoid over-shrinking fonts
-    const available = Math.max(60, (size.height - bottomMargin - footerReserve) - yCursor);
-    const innerW = contentWidth - padding * 2;
-    // Fit by reducing font size (not width) so text uses full width up to border
-    let fitFont = baseFont;
-    let fitLH = baseLH;
-    // Keep fonts from becoming too small when switching templates
-    const minFont = Math.max(baseFont - 2, isTXC ? 18 : 22);
-    const minLH = 1.9;
-    let neededH = combinedH;
-    while (neededH > available && fitFont > minFont) {
-      fitFont -= 1;
-      neededH = wrapH(combinedText, innerW, fitFont, 'Arabic Typesetting', fitLH);
+      const combinedH = wrapH(combinedText, contentWidth - padding * 2, baseFont, 'Traditional Arabic', baseLH);
+      const footerReserve = 110;
+      const available = Math.max(60, (size.height - bottomMargin - footerReserve) - yCursor);
+      const innerW = contentWidth - padding * 2;
+      let fitFont = baseFont;
+      let fitLH = baseLH;
+      const minFont = Math.max(baseFont - 2, isTXC ? 18 : 22);
+      const minLH = 1.9;
+      let neededH = combinedH;
+      while (neededH > available && fitFont > minFont) {
+        fitFont -= 1;
+        neededH = wrapH(combinedText, innerW, fitFont, 'Traditional Arabic', fitLH);
+      }
+      while (neededH > available && fitLH > minLH) {
+        fitLH = Math.max(minLH, Math.round((fitLH - 0.05) * 100) / 100);
+        neededH = wrapH(combinedText, innerW, fitFont, 'Traditional Arabic', fitLH);
+      }
+      if (combinedText) {
+        let baseCombined: PermisElement = {
+          id: uuidv4(),
+          type: 'text',
+          x: marginX + padding,
+          y: yCursor,
+          width: innerW,
+          text: combinedText,
+          language: 'ar',
+          direction: 'rtl',
+          fontSize: fitFont,
+          fontFamily: 'Traditional Arabic',
+          color: '#000',
+          draggable: true,
+          textAlign: 'right',
+          opacity: 1,
+          rotation: 0,
+          wrap: 'word',
+          lineHeight: fitLH,
+          styledRanges,
+          meta: { isArticle: true, pageIndex: PAGES.ARTICLES, articleId: 'combined', articleGroup: 'article_combined' }
+        } as any;
+        baseCombined = mergeArticleOverride(baseCombined, 'combined', 'article_combined');
+        combinedBlock = [baseCombined];
+      }
     }
-    while (neededH > available && fitLH > minLH) {
-      fitLH = Math.max(minLH, Math.round((fitLH - 0.05) * 100) / 100);
-      neededH = wrapH(combinedText, innerW, fitFont, 'Arabic Typesetting', fitLH);
-    }
-    const combinedEl = combinedText ? ({ id: uuidv4(), type: 'text', x: marginX + padding, y: yCursor, width: innerW, text: combinedText, language: 'ar', direction: 'rtl', fontSize: fitFont, fontFamily: 'Arabic Typesetting', color: '#000', draggable: true, textAlign: 'right', opacity: 1, rotation: 0, wrap: 'word', lineHeight: fitLH, styledRanges, meta: { isArticle: true, pageIndex: PAGES.ARTICLES } } as any) : null;
 
     setPages(prev => {
       let next = [...prev] as PermisPages;
@@ -1128,7 +1442,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       const absIdx = PAGES.ARTICLES;
       const keep = (next[absIdx] || []).filter(el => (el as any).meta?.isBorder || (el as any).meta?.isHeader || (el as any).meta?.isGrid);
       const pageEls: PermisElement[] = [...keep, ...builtIntro];
-      if (combinedEl) pageEls.push(combinedEl);
+      if (combinedBlock.length) pageEls.push(...combinedBlock);
       // Footer signatures and location on bottom of page 2
       const rightWidth = 260;
       const rightX = size.width - rightWidth - (isTXC ? 24 : 40);
@@ -1212,6 +1526,46 @@ function createCornerDecorations(color: string, width: number, height: number): 
     const article = source.find(a => a.id === articleId);
     if (!article) return;
 
+    const overrideElementsRaw = overrides?.get(articleId);
+    const sizePreview = getSize(PAGES.ARTICLES + relPage);
+    const contentPreviewWidth = sizePreview.width - marginX * 2 - padding * 2;
+    if (overrideElementsRaw && overrideElementsRaw.length) {
+      const clonedOverride = overrideElementsRaw.map(el => safeClone(el));
+      const { minY, blockHeight } = computeBlockMetrics(clonedOverride, contentPreviewWidth);
+      const gapSize = article.id === 'decision' ? decisionGap : defaultArticleGap;
+      const bottomLimit = sizePreview.height - bottomMargin;
+      if ((currentYByPage[relPage] + blockHeight) > bottomLimit) {
+        relPage += 1;
+        ensurePage(relPage);
+      }
+      const targetSize = getSize(PAGES.ARTICLES + relPage);
+      const targetContentWidth = targetSize.width - marginX * 2 - padding * 2;
+      const baseY = currentYByPage[relPage];
+      const positionedOverride = clonedOverride.map(orig => {
+        const relY = (orig.y ?? 0) - minY;
+        const meta = {
+          ...(orig.meta || {}),
+          isArticle: true,
+          articleId,
+          pageIndex: PAGES.ARTICLES + relPage,
+        };
+        const groupName =
+          meta.articleGroup ||
+          (orig.type === 'line' ? `article_${articleId}_underline` : `article_${articleId}`);
+        meta.articleGroup = groupName;
+        meta.articleId = articleId;
+        return {
+          ...orig,
+          x: orig.x ?? (marginX + padding),
+          y: baseY + relY,
+          meta,
+        } as PermisElement;
+      });
+      perPageBlocks[relPage].push(...positionedOverride);
+      currentYByPage[relPage] = baseY + blockHeight + gapSize;
+      return;
+    }
+
     const size = getSize(PAGES.ARTICLES + relPage);
     const contentWidth = size.width - marginX * 2;
 
@@ -1221,7 +1575,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       yStart: 0,
       x: 0,
       width: contentWidth - padding * 2,
-      fontFamily: 'Arabic Typesetting',
+      fontFamily: 'Traditional Arabic',
       textAlign: 'right',
       direction: 'rtl',
       fontSize: isTXC ? 18 : 24,
@@ -1268,7 +1622,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
             strokeWidth: 1,
             opacity: 1,
             draggable: true,
-            meta: { articleGroup: `${articleId}_underline` }
+            meta: { isArticle: true, articleId, articleGroup: `${articleId}_underline` }
           } as any);
         }
       }
@@ -1319,6 +1673,17 @@ function createCornerDecorations(color: string, width: number, height: number): 
       const elWidth = el.width || (contentWidth - padding * 2);
       // Right-align within the single column for RTL text
       const elementX = marginX + (contentWidth - elWidth) - padding;
+      const origMeta = { ...(el.meta || {}) };
+      const groupName =
+        origMeta.articleGroup ||
+        (el.type === 'line' ? `article_${articleId}_underline` : `article_${articleId}`);
+      const meta = {
+        ...origMeta,
+        pageIndex: PAGES.ARTICLES + relPage,
+        isArticle: true,
+        articleId,
+        articleGroup: groupName
+      };
       return {
         ...el,
         x: elementX,
@@ -1330,7 +1695,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
         wrap: 'word',
         padding: padding,
         width: elWidth,
-        meta: { ...(el.meta || {}), pageIndex: PAGES.ARTICLES + relPage, isArticle: true }
+        meta
       } as PermisElement;
     });
 
@@ -1445,6 +1810,10 @@ function createCornerDecorations(color: string, width: number, height: number): 
     return sizes;
   });
 }, [pushHistory, canvasSizes, initialData]);
+
+  useEffect(() => {
+    articleRelayoutRef.current = insertArticlesAsElements;
+  }, [insertArticlesAsElements]);
 
   useEffect(() => {
     let mounted = true;
@@ -1801,11 +2170,17 @@ function createCornerDecorations(color: string, width: number, height: number): 
         || (data as any)?.date_debut
         || (data as any)?.date_octroi
       );
+      if (!dStart) {
+        dStart = parseAccessDate((data as any)?.date_octroi_fr);
+      }
       let dEnd = parseAccessDate((data as any)?.DateExpiration
         || (data as any)?.dateFin
         || (data as any)?.date_fin
         || (data as any)?.date_expiration
       );
+      if (!dEnd) {
+        dEnd = parseAccessDate((data as any)?.date_expiration_fr);
+      }
       if ((!dStart && dCreation) || (dStart && dCreation && dStart.getTime() < dCreation.getTime() - 24*3600*1000)) {
         dStart = dCreation;
       }
@@ -2869,7 +3244,7 @@ const detailsFontSize = 30;
       text: type === 'text' ? (currentPage === PAGES.ARTICLES ? 'Nouvelle text' : 'Nouvelle text') : undefined,
       language: type === 'text' ? (currentPage === PAGES.ARTICLES ? 'ar' : 'fr') : undefined,
       direction: type === 'text' ? (currentPage === PAGES.ARTICLES ? 'rtl' : 'ltr') : undefined,
-      fontSize: (type === 'text' && currentPage === PAGES.ARTICLES) ? 28 : 20,
+      fontSize: (type === 'text' && currentPage === PAGES.ARTICLES) ? 25 : 20,
       fontFamily: type === 'text' ? (currentPage === PAGES.ARTICLES ? ARABIC_FONTS[0] : FONT_FAMILIES[0]) : FONT_FAMILIES[0],
       color: '#101822',
       draggable: true,
@@ -3725,7 +4100,7 @@ const detailsFontSize = 30;
         if (!el || el.type !== 'text') return el;
         const changed: any = { ...el };
         changed.fontFamily = 'Traditional Arabic';
-        changed.fontSize = 28;
+          changed.fontSize = 25;
         return changed;
       });
       next[pageIdx] = arr;
@@ -3762,7 +4137,7 @@ const pageLabel = (idx: number) => {
                 value={page2DigitsFont}
                 onChange={(e) => {
                   const v = parseInt(e.target.value || '24');
-                  const clamped = Math.max(8, Math.min(128, isNaN(v) ? 24 : v));
+                  const clamped = Math.max(4, Math.min(128, isNaN(v) ? 20 : v));
                   setPage2DigitsFont(clamped);
                   applyDigitsFontSizeToPage2(clamped);
                 }}
