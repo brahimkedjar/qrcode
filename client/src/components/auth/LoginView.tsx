@@ -16,7 +16,7 @@ const ALLOWED_USERNAMES = new Set([
   'ANAM1368',
   'ANAM1408',
 'ANAM1383',
-'ANAM1393',
+'ANAM1373',
 'ANAM1421',
   'ANAM1206'
 ]);
@@ -28,7 +28,7 @@ const CADASTRE_USERS = new Set([
   'ANAM1368',
   'ANAM1408',
   'ANAM1383',
-  'ANAM1393',
+  'ANAM1373',
   'ANAM1421'
 ]);
 

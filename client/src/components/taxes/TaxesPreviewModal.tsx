@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import styles from './TaxesPage.module.css';
 import { generatePDFForPreview } from './pdfGenerator';
 
@@ -18,12 +18,17 @@ const toBlob = async (dataUrl: string): Promise<Blob> => {
 };
 
 export default function TaxesPreviewModal({ open, type, initialData, onClose, onDownload }: Props) {
-  const [form, setForm] = useState<any>(initialData || {});
+  const normalizeInitialData = (data: any) => ({
+    showDate: data?.showDate ?? true,
+    ...data
+  });
+
+  const [form, setForm] = useState<any>(normalizeInitialData(initialData || {}));
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setForm(initialData || {});
+    setForm(normalizeInitialData(initialData || {}));
   }, [initialData]);
 
   const refresh = async () => {
@@ -73,7 +78,7 @@ export default function TaxesPreviewModal({ open, type, initialData, onClose, on
               <label className={styles.label}>Société</label>
               <input className={styles.input} value={form.companyName || ''} onChange={(e) => onChange('companyName', e.target.value)} />
               <div className={styles.row}>
-                <div style={{ flex: 1 }}>
+              <div style={{ flex: 1 }}>
                   <label className={styles.label}>Type permis</label>
                   <input className={styles.input} value={form.permitType || ''} onChange={(e) => onChange('permitType', e.target.value)} />
                 </div>
@@ -82,6 +87,13 @@ export default function TaxesPreviewModal({ open, type, initialData, onClose, on
                   <input className={styles.input} value={form.permitCode || ''} onChange={(e) => onChange('permitCode', e.target.value)} />
                 </div>
               </div>
+              <label className={styles.label}>Libellé du permis</label>
+              <input
+                className={styles.input}
+                value={form.permitDisplay || ''}
+                onChange={(e) => onChange('permitDisplay', e.target.value)}
+                placeholder={[form.permitType, form.permitCode].filter(Boolean).join(' ').trim() || ''}
+              />
               <label className={styles.label}>Lieu</label>
               <input className={styles.input} value={form.location || ''} onChange={(e) => onChange('location', e.target.value)} />
               {type === 'TS' && (
@@ -100,10 +112,11 @@ export default function TaxesPreviewModal({ open, type, initialData, onClose, on
                   <input className={styles.input} value={form.orderNumber || ''} onChange={(e) => onChange('orderNumber', e.target.value)} />
                 </div>
               </div>
+              
               <div className={styles.row}>
                 <div style={{ flex: 1 }}>
                   <label className={styles.label}>Destinataire</label>
-                  <input className={styles.input} value={form.taxReceiver || ''} onChange={(e) => onChange('taxReceiver', e.target.value)} />
+                  <input className={styles.input} value={form.taxReceiver || ''} disabled onChange={(e) => onChange('taxReceiver', e.target.value)} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className={styles.label}>Adresse</label>
@@ -113,10 +126,12 @@ export default function TaxesPreviewModal({ open, type, initialData, onClose, on
                     onChange={(e) => onChange('taxReceiverAddress', e.target.value)}
                   >
                     <option value="17 rue Arezki Hammani, 3ème étage –Alger">17 rue Arezki Hammani, 3ème étage –Alger</option>
-                    <option value="18 rue beniourtilane , 4ème étage –Alger">18 rue beniourtilane , 4ème étage –Alger</option>
+                    <option value="des impôts de la wilaya de Djanet">des impôts de la wilaya de Djanet</option>
+                    <option value="de la wilaya de Tamanrasset ">de la wilaya de Tamanrasset </option>
                   </select>
                 </div>
               </div>
+              
               <div className={styles.row}>
                 <div style={{ width: 180 }}>
                   <label className={styles.label}>Date</label>
@@ -127,10 +142,31 @@ export default function TaxesPreviewModal({ open, type, initialData, onClose, on
                   <input className={styles.input} value={form.place || ''} onChange={(e) => onChange('place', e.target.value)} placeholder="Alger" />
                 </div>
               </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, margin: '6px 0 10px' }}>
+                <input
+                  type="checkbox"
+                  checked={form.showDate !== false}
+                  onChange={(e) => onChange('showDate', e.target.checked)}
+                  style={{ width: 16, height: 16 }}
+                />
+                Afficher la date sur le PDF
+              </label>
               <div className={styles.row}>
                 <div style={{ flex: 1 }}>
                   <label className={styles.label}>Président (mention)</label>
-                  <input className={styles.input} value={form.president || ''} onChange={(e) => onChange('president', e.target.value)} placeholder="P/ Le Président du Comité de Direction" />
+                  <select
+                    className={styles.input}
+                    value={form.president || 'P/ Le Président du Comité de Direction'}
+                    onChange={(e) => onChange('president', e.target.value)}
+                  >
+                    <option value="P/ Le Président du Comité de Direction">P/ Le Président du Comité de Direction</option>
+                    <option value="Le Président">Le Président</option>
+                    {form.president &&
+                      form.president !== 'P/ Le Président du Comité de Direction' &&
+                      form.president !== 'Le Président' && (
+                        <option value={form.president}>{form.president}</option>
+                      )}
+                  </select>
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className={styles.label}>Signature</label>

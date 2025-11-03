@@ -1,15 +1,23 @@
-﻿import React from 'react';
+import React from 'react';
 import styles from './header.module.css';
 
 type Props = {
   userName: string;
   onLogout: () => void;
-  view?: 'designer' | 'verify' | 'pdfs' | 'taxes' | 'sync' ;
+  view?: 'designer' | 'verify' | 'pdfs' | 'taxes' | 'sync';
   onChangeView?: (v: 'designer' | 'verify' | 'pdfs' | 'taxes' | 'sync') => void;
   canAccessTaxes?: boolean;
+  canSeeSync?: boolean;
 };
 
-export default function AuthHeader({ userName, onLogout, view = 'designer', onChangeView, canAccessTaxes = false }: Props) {
+export default function AuthHeader({
+  userName,
+  onLogout,
+  view = 'designer',
+  onChangeView,
+  canAccessTaxes = false,
+  canSeeSync = false
+}: Props) {
   return (
     <div className={styles.bar}>
       <div className={styles.brand}>
@@ -25,7 +33,9 @@ export default function AuthHeader({ userName, onLogout, view = 'designer', onCh
             {canAccessTaxes && (
               <button className={`${styles.tab} ${view === 'taxes' ? styles.tabActive : ''}`} onClick={() => onChangeView('taxes')}>Taxes</button>
             )}
-            <button className={`${styles.tab} ${view === 'sync' ? styles.tabActive : ''}`} onClick={() => onChangeView('sync')}>Synchronisation</button>
+            {canSeeSync && (
+              <button className={`${styles.tab} ${view === 'sync' ? styles.tabActive : ''}`} onClick={() => onChangeView('sync')}>Synchronisation</button>
+            )}
           </div>
         )}
         <div className={styles.user}>{userName}</div>

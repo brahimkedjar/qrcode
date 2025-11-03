@@ -1,7 +1,8 @@
 ﻿import React, { useMemo, useState } from 'react';
 import axios from 'axios';
 import TaxesPreviewModal from './TaxesPreviewModal';
-import { generatePDFForPreview, generateUniqueOrderNumber } from './pdfGenerator';
+import { generatePDFForPreview, generateUniqueOrderNumber, buildBatchPdf } from './pdfGenerator';
+import type { OrderData } from './pdfGenerator';
 import styles from './TaxesPage.module.css';
 const API_URL = (import.meta as any).env?.VITE_API_URL || '';
 
@@ -45,6 +46,34 @@ type DeaRow = {
   num_quittance?: string;
 };
 
+type BatchReceiptApiRow = {
+  type: 'TS' | 'DEA';
+  receiptId: number;
+  titreId: number;
+  orderNumber?: string;
+  amount?: number;
+  amountRaw?: any;
+  date?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  payed?: boolean;
+  permit: {
+    id: number;
+    code?: string | null;
+    typeCode?: string | null;
+    typeName?: string | null;
+    detenteurName?: string | null;
+    detenteurId?: number | null;
+    wilaya?: string | null;
+    wilayaId?: number | null;
+    codeWilaya?: string | null;
+    lieuDit?: string | null;
+    commune?: string | null;
+    daira?: string | null;
+  };
+  raw?: any;
+};
+
 export default function TaxesPage() {
   const [idTitre, setIdTitre] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,6 +88,16 @@ export default function TaxesPage() {
   const [toDate, setToDate] = useState('');
   const [selectedTs, setSelectedTs] = useState<Record<number, boolean>>({});
   const [selectedDea, setSelectedDea] = useState<Record<number, boolean>>({});
+  const [batchYear, setBatchYear] = useState('');
+  const [batchFrom, setBatchFrom] = useState('');
+  const [batchTo, setBatchTo] = useState('');
+  const [batchWilaya, setBatchWilaya] = useState('');
+  const [batchIncludeTs, setBatchIncludeTs] = useState(true);
+  const [batchIncludeDea, setBatchIncludeDea] = useState(true);
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchMessage, setBatchMessage] = useState<string | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [batchResultCount, setBatchResultCount] = useState<number | null>(null);
 
   const search = async () => {
     setErr(null);
@@ -142,9 +181,26 @@ export default function TaxesPage() {
   // Format a period token from Access-like date values (strip time if present)
   const formatPeriodToken = (s?: string): string => {
     if (!s) return '';
-    const t = String(s).trim();
-    const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    return m ? `${m[1]}/${m[2]}/${m[3]}` : t.replace(/\s+\d{2}:\d{2}:\d{2}.*/, '');
+    const trimmed = String(s).trim().replace(/\s+\d{2}:\d{2}:\d{2}.*/, '');
+    const iso = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (iso) {
+      const [, year, month, day] = iso;
+      return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`;
+    }
+    const european = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (european) {
+      const [, day, month, year] = european;
+      return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`;
+    }
+    return trimmed;
+  };
+
+  const formatPeriodRange = (start?: string, end?: string): string => {
+    const tokens = [formatPeriodToken(start), formatPeriodToken(end)].filter(Boolean);
+    if (tokens.length === 2) {
+      return `${tokens[0]} au ${tokens[1]}`;
+    }
+    return tokens[0] || '';
   };
 
   const openPreviewTS = async (row: TaxeSupRow) => {
@@ -181,10 +237,14 @@ export default function TaxesPage() {
     const daira = (permisInfo?.daira || permisInfo?.Daira || '').toString();
     const baseLoc = lieuDit || (permisInfo?.localisation || '-');
     const fullLoc = baseLoc + (daira ? `, Daira de ${daira}` : '');
+    const permitType = permisInfo?.typePermis?.nom || permisInfo?.typePermis?.code || '-';
+    const permitCode = permisInfo?.codeDemande || permisInfo?.Code || String(idTitre || '');
+    const permitDisplay = [permitType, permitCode].filter(Boolean).join(' ').trim();
     return {
       companyName: detName || '-',
-      permitType: permisInfo?.typePermis?.nom || permisInfo?.typePermis?.code || '-',
-      permitCode: permisInfo?.codeDemande || permisInfo?.Code || String(idTitre || ''),
+      permitType,
+      permitCode,
+      permitDisplay,
       location: fullLoc,
       lieuDit,
       daira,
@@ -192,7 +252,48 @@ export default function TaxesPage() {
       taxReceiverAddress: '17 rue Arezki Hammani, 3ème étage –Alger',
       signatureName: 'Seddik BENABBES',
       president: 'P/ Le Président du Comité de Direction',
+      place: 'Alger',
     } as any;
+  };
+
+  const buildOrderDataFromBatch = (row: BatchReceiptApiRow): OrderData => {
+    const permit = row.permit || { id: row.titreId };
+    const amount =
+      typeof row.amount === 'number'
+        ? row.amount
+        : parseAmount(row.amountRaw);
+    const dateObj = parseAccessDate(row.date) || new Date();
+    const permitType = permit.typeName || permit.typeCode || '-';
+    const permitCode = permit.code || String(row.titreId || '');
+    const permitDisplay = [permitType, permitCode].filter(Boolean).join(' ').trim();
+    const lieuDit = (permit.lieuDit || '').toString();
+    const daira = (permit.daira || '').toString();
+    const baseLoc = lieuDit || (permit.commune || permit.wilaya || '-');
+    const fullLoc = daira ? `${baseLoc}, Daira de ${daira}` : baseLoc;
+    const detId = permit.detenteurId ?? 0;
+    const orderNumber =
+      row.orderNumber && row.orderNumber.trim()
+        ? row.orderNumber.trim()
+        : generateUniqueOrderNumber(row.type, detId, row.receiptId, row.titreId, dateObj.getFullYear());
+    const periodText = formatPeriodRange(row.periodStart, row.periodEnd);
+
+    return {
+      companyName: permit.detenteurName || '-',
+      permitType,
+      permitCode,
+      permitDisplay,
+      location: fullLoc,
+      amount,
+      orderNumber,
+      date: dateObj,
+      taxReceiver: 'Receveur des impôts',
+      taxReceiverAddress: '17 rue Arezki Hammani, 3ème étage –Alger',
+      period: row.type === 'TS' && periodText ? periodText : undefined,
+      signatureName: 'Seddik BENABBES',
+      president: 'P/ Le Président du Comité de Direction',
+      place: permit.wilaya || 'Alger',
+      showDate: true,
+    };
   };
 
   const downloadTaxe = async (row: TaxeSupRow) => {
@@ -292,6 +393,67 @@ export default function TaxesPage() {
     }
   };
 
+  const downloadBatch = async () => {
+    setBatchError(null);
+    setBatchMessage(null);
+    setBatchResultCount(null);
+    if (!batchIncludeTs && !batchIncludeDea) {
+      setBatchError('Sélectionnez au moins un type de reçu (TS ou DEA).');
+      return;
+    }
+
+    setBatchLoading(true);
+    try {
+      const params: Record<string, any> = {};
+      if (batchYear.trim()) params.year = batchYear.trim();
+      if (batchFrom) params.from = batchFrom;
+      if (batchTo) params.to = batchTo;
+      if (batchWilaya.trim()) params.wilaya = batchWilaya.trim();
+      if (batchIncludeTs && !batchIncludeDea) params.type = 'TS';
+      else if (!batchIncludeTs && batchIncludeDea) params.type = 'DEA';
+      else params.type = 'ALL';
+      params.statusId = 2;
+
+      const resp = await axios.get(`${API_URL}/api/finance/receipts/batch`, { params });
+      const rows = (resp.data?.rows || []) as BatchReceiptApiRow[];
+      if (!rows.length) {
+        setBatchError('Aucun reçu trouvé pour les filtres fournis.');
+        setBatchResultCount(0);
+        return;
+      }
+
+      const entries = rows.map((row) => ({
+        type: (row.type === 'DEA' ? 'DEA' : 'TS') as 'DEA' | 'TS',
+        data: buildOrderDataFromBatch(row),
+      }));
+
+      const doc = buildBatchPdf(entries);
+      const typeLabel = batchIncludeTs && batchIncludeDea ? 'TS-DEA' : batchIncludeTs ? 'TS' : 'DEA';
+      const fileParts: string[] = [typeLabel];
+      if (batchWilaya.trim()) fileParts.push(batchWilaya.trim().replace(/\s+/g, '_'));
+      if (batchYear.trim()) fileParts.push(batchYear.trim());
+      else {
+        if (batchFrom) fileParts.push(`from_${batchFrom}`);
+        if (batchTo) fileParts.push(`to_${batchTo}`);
+      }
+      const fileName = `Reçus_${fileParts.filter(Boolean).join('_') || 'batch'}.pdf`;
+      doc.save(fileName);
+
+      const total = Number(resp.data?.count ?? rows.length);
+      setBatchResultCount(total);
+      setBatchMessage(`Téléchargement terminé (${total} reçu${total > 1 ? 's' : ''}).`);
+    } catch (error: any) {
+      console.error('[Taxes] batch download failed', error);
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Échec du téléchargement du paquet.';
+      setBatchError(message);
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   return (
     <div className={styles.wrap}>
       <div className={styles.panel}>
@@ -337,7 +499,98 @@ export default function TaxesPage() {
               <span className={styles.badge}>Wilaya: {permisInfo?.wilaya || '-'}</span>
             </div>
           </div>
-        )}        <div className={styles.grid}>
+        )}
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>
+            <div className={styles.title}>Téléchargement en paquet</div>
+            {batchResultCount !== null && (
+              <div className={styles.count}>
+                {batchResultCount} reçu{batchResultCount !== 1 ? 's' : ''}
+              </div>
+            )}
+          </div>
+          <div className={styles.batchGrid}>
+            <div>
+              <div className={styles.label}>Année</div>
+              <input
+                className={styles.input}
+                placeholder="2025"
+                value={batchYear}
+                onChange={(e) => setBatchYear(e.target.value)}
+              />
+            </div>
+            <div>
+              <div className={styles.label}>Date début</div>
+              <input
+                className={styles.input}
+                type="date"
+                value={batchFrom}
+                onChange={(e) => setBatchFrom(e.target.value)}
+              />
+            </div>
+            <div>
+              <div className={styles.label}>Date fin</div>
+              <input
+                className={styles.input}
+                type="date"
+                value={batchTo}
+                onChange={(e) => setBatchTo(e.target.value)}
+              />
+            </div>
+            <div>
+              <div className={styles.label}>Wilaya</div>
+              <input
+                className={styles.input}
+                placeholder="ex: Sétif ou 19"
+                value={batchWilaya}
+                onChange={(e) => setBatchWilaya(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className={styles.checkboxRow}>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={batchIncludeTs}
+                onChange={(e) => setBatchIncludeTs(e.target.checked)}
+              />
+              Taxe superficiaire (TS)
+            </label>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={batchIncludeDea}
+                onChange={(e) => setBatchIncludeDea(e.target.checked)}
+              />
+              Droit d'établissement d'acte (DEA)
+            </label>
+          </div>
+          {batchError && <div className={styles.errorMessage}>{batchError}</div>}
+          {batchMessage && !batchError && <div className={styles.successMessage}>{batchMessage}</div>}
+          <div className={styles.toolbar}>
+            <button className={styles.primaryBtn} onClick={downloadBatch} disabled={batchLoading}>
+              {batchLoading ? 'Préparation…' : 'Télécharger le paquet'}
+            </button>
+            <button
+              className={styles.btnSecondary}
+              onClick={() => {
+                setBatchYear('');
+                setBatchFrom('');
+                setBatchTo('');
+                setBatchWilaya('');
+                setBatchIncludeTs(true);
+                setBatchIncludeDea(true);
+                setBatchError(null);
+                setBatchMessage(null);
+                setBatchResultCount(null);
+              }}
+              disabled={batchLoading}
+            >
+              Réinitialiser
+            </button>
+          </div>
+        </div>
+        <div className={styles.grid}>
           <div className={styles.card}>
             <div className={styles.cardHeader}>
               <div className={styles.title}>Taxe Superficiaire</div>

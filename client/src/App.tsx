@@ -17,6 +17,7 @@ const API_URL = (import.meta as any).env?.VITE_API_URL || '';
 
 export default function App() {
   const [authUser, setAuthUser] = useState<string>('');
+  const [authUsername, setAuthUsername] = useState<string>('');
   const [authGroups, setAuthGroups] = useState<string[]>([]);
   const [view, setView] = useState<'designer' | 'verify' | 'pdfs' | 'taxes' | 'sync'>('designer');
   const [permisId, setPermisId] = useState<string>('');
@@ -31,6 +32,7 @@ export default function App() {
     (window as any).process.env.NEXT_PUBLIC_API_URL = API_URL;
     try {
       const u = localStorage.getItem('auth_user_name') || '';
+      const uname = localStorage.getItem('auth_user_username') || '';
       const t = localStorage.getItem('auth_token') || '';
       let groups: string[] = [];
       try {
@@ -40,7 +42,10 @@ export default function App() {
           if (Array.isArray(parsed)) groups = parsed.map(String);
         }
       } catch {}
-      if (u && t) setAuthUser(u);
+      if (u && t) {
+        setAuthUser(u);
+        setAuthUsername(uname || '');
+      }
       setAuthGroups(groups);
     } catch {}
   }, []);
@@ -94,6 +99,7 @@ export default function App() {
     } };
 
   const canAccessTaxes = authGroups.includes('cadastre');
+  const canSeeSync = ['ANAM1405', 'ANAM1206'].includes((authUsername || '').trim().toUpperCase());
 
   useEffect(() => {
     if (view === 'taxes' && !canAccessTaxes) {
@@ -101,11 +107,18 @@ export default function App() {
     }
   }, [view, canAccessTaxes]);
 
+  useEffect(() => {
+    if (view === 'sync' && !canSeeSync) {
+      setView('designer');
+    }
+  }, [view, canSeeSync]);
+
   if (!authUser) {
     return (
       <LoginView
         onLoggedIn={(name, _token, _username, groups) => {
           setAuthUser(name);
+          setAuthUsername(_username);
           setAuthGroups(groups);
           if (!groups.includes('cadastre')) {
             setView('designer');
@@ -121,6 +134,7 @@ export default function App() {
     try { localStorage.removeItem('auth_user_username'); } catch {}
     try { localStorage.removeItem('auth_user_groups'); } catch {}
     setAuthUser('');
+    setAuthUsername('');
     setAuthGroups([]);
     setView('designer');
     try {  } catch {}
@@ -128,6 +142,7 @@ export default function App() {
 
   const handleChangeView = (next: 'designer' | 'verify' | 'pdfs' | 'taxes' | 'sync') => {
     if (next === 'taxes' && !canAccessTaxes) return;
+    if (next === 'sync' && !canSeeSync) return;
     setView(next);
   };
 
@@ -136,6 +151,7 @@ export default function App() {
       <ToastContainer position="bottom-right" theme="colored" newestOnTop closeOnClick pauseOnHover />
       <AuthHeader
         userName={authUser}
+        canSeeSync={canSeeSync}
         onLogout={doLogout}
         view={view}
         onChangeView={handleChangeView}

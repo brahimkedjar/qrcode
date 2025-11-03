@@ -5,6 +5,19 @@ import { FinanceService } from './finance.service';
 export class FinanceController {
   constructor(private readonly finance: FinanceService) {}
 
+  @Get('receipts/batch')
+  async batchReceipts(@Query() query: Record<string, any>) {
+    const result = await this.finance.getReceiptsBatch({
+      year: query.year ?? query.annee,
+      from: query.from ?? query.start ?? query.dateFrom ?? query.fromDate,
+      to: query.to ?? query.end ?? query.dateTo ?? query.toDate,
+      wilaya: query.wilaya ?? query.codeWilaya ?? query.idWilaya,
+      type: query.type ?? query.kind ?? query.receiptType,
+      statusId: query.statusId ?? query.status ?? query.idStatutTitre,
+    });
+    return result;
+  }
+
   @Get('taxes-sup')
   async taxesSup(@Query('idTitre') idTitre?: string) {
     if (!idTitre || !/^\d+$/.test(idTitre)) {
