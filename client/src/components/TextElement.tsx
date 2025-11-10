@@ -81,6 +81,8 @@ export const TextElement: React.FC<TextElementProps> = ({
     return { ascent: fontSize * 0.78, descent: fontSize * 0.22 };
   };
 
+  const isLatinOrDigit = (value: string): boolean => /[A-Za-z\u00C0-\u024F0-9]/.test(String(value || ''));
+
   // Build styled runs from base text and element.styledRanges
   const styledLayout = useMemo(() => {
     if (!element.styledRanges || element.styledRanges.length === 0) return null;
@@ -266,17 +268,21 @@ export const TextElement: React.FC<TextElementProps> = ({
         for (const seg of line.segments) {
           const segW = widthFor(seg.text, seg.fontSize, seg.fontWeight);
           const x = startX + (lineWidth - (acc + segW));
-          // baseline align: y offset so baselines match
-          const ySeg = y + (line.ascent - seg.ascent);
-          placed.push({ ...seg, x, y: ySeg });
+          // baseline align: y offset so baselines match, plus nudge for scaled Latin/digits
+          const yBase = y + (line.ascent - seg.ascent);
+          const needsNudge = isLatinOrDigit(seg.text) && seg.fontSize < baseFont;
+          const nudge = needsNudge ? Math.round((baseFont - seg.fontSize) * 0.22) : 0;
+          placed.push({ ...seg, x, y: yBase + nudge });
           acc += segW;
         }
       } else {
         for (const seg of line.segments) {
           const segW = widthFor(seg.text, seg.fontSize, seg.fontWeight);
           const x = startX + acc;
-          const ySeg = y + (line.ascent - seg.ascent);
-          placed.push({ ...seg, x, y: ySeg });
+          const yBase = y + (line.ascent - seg.ascent);
+          const needsNudge = isLatinOrDigit(seg.text) && seg.fontSize < baseFont;
+          const nudge = needsNudge ? Math.round((baseFont - seg.fontSize) * 0.22) : 0;
+          placed.push({ ...seg, x, y: yBase + nudge });
           acc += segW;
         }
       }
@@ -292,9 +298,10 @@ export const TextElement: React.FC<TextElementProps> = ({
 
   // Build continuous underline bridges per line to avoid tiny gaps between segments (e.g., between Arabic and Latin tokens)
   const extraUnderlines = useMemo(() => {
-    if (!styledLayout) return [] as Array<{ x: number; y: number; w: number; h: number; color: string }>; 
+    if (!styledLayout) return [] as Array<{ x: number; y: number; w: number; h: number; color: string }>;
     type G = { x1: number; x2: number; baseline: number; maxF: number; color: string };
-    const groups = new Map<number, G>();
+    const groups: G[] = [];
+    const baselineTolerance = 1; // px tolerance to merge nearly-equal baselines
     for (const seg of styledLayout.placed) {
       if (!seg.underline) continue;
       const segW = measureWidth(seg.text, seg.fontSize, element.fontFamily, seg.fontWeight);
@@ -302,23 +309,26 @@ export const TextElement: React.FC<TextElementProps> = ({
       const x1 = seg.x;
       const x2 = seg.x + segW;
       const color = (seg.color || element.color || '#000') as string;
-      const g = groups.get(baseline);
+      let g = groups.find(gr => Math.abs(gr.baseline - baseline) <= baselineTolerance);
       if (!g) {
-        groups.set(baseline, { x1, x2, baseline, maxF: seg.fontSize, color });
+        g = { x1, x2, baseline, maxF: seg.fontSize, color };
+        groups.push(g);
       } else {
         g.x1 = Math.min(g.x1, x1);
         g.x2 = Math.max(g.x2, x2);
         g.maxF = Math.max(g.maxF, seg.fontSize);
         if (g.color === '#000' && color !== '#000') g.color = color;
+        // Snap baseline to the average to reduce tiny Y jitter
+        g.baseline = Math.round((g.baseline + baseline) / 2);
       }
     }
     // Map each group to a single underline rect with dynamic offset/thickness similar to Konva
     const rects: Array<{ x: number; y: number; w: number; h: number; color: string }> = [];
-    for (const g of groups.values()) {
-      // Slightly lower and thicker than before per user feedback
+    for (const g of groups) {
       const thickness = Math.max(1, Math.round(g.maxF * 0.08));
       const offset = Math.max(1, Math.round(g.maxF * 0.50));
-      rects.push({ x: g.x1, y: g.baseline + offset, w: Math.max(0, g.x2 - g.x1), h: thickness, color: g.color });
+      // Nudge 1px up (closer to text baseline)
+      rects.push({ x: g.x1, y: g.baseline + offset - 1, w: Math.max(0, g.x2 - g.x1), h: thickness, color: g.color });
     }
     return rects;
   }, [styledLayout, element.fontFamily, element.color, element.lineHeight]);

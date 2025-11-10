@@ -32,6 +32,7 @@ export const toArticleElements = (options: {
   lineHeight: number;
   padding: number;
   spacing: number;
+  latinScale?: number;
 }): PermisElement[] => {
   const elements: PermisElement[] = [];
   let currentY = options.yStart;
@@ -63,7 +64,21 @@ export const toArticleElements = (options: {
 
     // Keep title bold, but avoid text-decoration underline to prevent gaps between words.
     // A single continuous rule is drawn separately in the designer.
-    const styledRanges = (titleLen > 0) ? [{ start: 0, end: titleLen, fontWeight: 'bold', underline: true }] : undefined as any;
+    const styledRanges: any[] = [];
+    if (titleLen > 0) styledRanges.push({ start: 0, end: titleLen, fontWeight: 'bold', underline: true });
+    // Scale Latin/French segments if requested
+    const latinScale = Math.max(0.5, Math.min(1.5, options.latinScale ?? 1));
+    if (latinScale !== 1) {
+      const reLatin = /[A-Za-z\u00C0-\u024F0-9][A-Za-z\u00C0-\u024F0-9._\-\/\\]*/g;
+      const base = options.fontSize;
+      const fs = Math.max(8, Math.round(base * latinScale));
+      let m: RegExpExecArray | null;
+      while ((m = reLatin.exec(textCombined)) !== null) {
+        const start = m.index;
+        const end = start + m[0].length;
+        styledRanges.push({ start, end, fontSize: fs });
+      }
+    }
     elements.push({
       id: uuidv4(),
       type: 'text',

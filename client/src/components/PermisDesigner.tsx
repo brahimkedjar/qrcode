@@ -33,6 +33,9 @@ const PAGES = {
   ARTICLES: 1
 } as const;
 
+// Enforce a consistent line-height for articles on page 2
+const ARTICLES_LINE_HEIGHT = 1.6;
+
 type TransformerBoundingBox = {
   x: number;
   y: number;
@@ -188,6 +191,8 @@ const normalizeCoordinateTables = (pages: PermisPages): PermisPages => {
   const [activeTemplate, setActiveTemplate] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
   const [showGrid, setShowGrid] = useState(false);
+  // Designer-only guides should never appear in exports
+  const [hideGuides, setHideGuides] = useState(false);
   const setPages = useCallback((value: PermisPages | ((prev: PermisPages) => PermisPages)) => {
     if (typeof value === 'function') {
       setPagesState(prev => normalizeCoordinateTables((value as (prev: PermisPages) => PermisPages)(prev)));
@@ -210,6 +215,16 @@ const normalizeCoordinateTables = (pages: PermisPages): PermisPages => {
       return (v === 'high' || v === 'balanced' || v === 'small') ? (v as any) : 'balanced';
     } catch { return 'balanced'; }
   });
+  // Page 2 Latin/French text scale (relative to base font)
+  const [page2LatinScale, setPage2LatinScale] = useState<number>(() => {
+    try {
+      const v = parseFloat(localStorage.getItem('page2_latin_scale') || '');
+      return Number.isFinite(v) && v > 0 ? v : 0.85;
+    } catch { return 0.85; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('page2_latin_scale', String(page2LatinScale)); } catch {}
+  }, [page2LatinScale]);
   const apiURL = process.env.NEXT_PUBLIC_API_URL;
   const normalizeDateInput = (val: any): string => {
     // Normalize to YYYY-MM-DD using local date parts (avoid UTC shifts)
@@ -1022,7 +1037,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
     }
     if (element?.type === 'text') {
       const fontSize = (element.fontSize || (isTXC ? 18 : 24));
-      const lineH = element.lineHeight || (isTXC ? 1.3 : 1.7);
+      const lineH = (element.lineHeight ?? ARTICLES_LINE_HEIGHT);
       const width = Math.max(10, element.width || availableWidth);
       const text = String((element as any).text || '');
       return estimateTextHeight(text, width, fontSize, lineH);
@@ -1070,8 +1085,8 @@ function createCornerDecorations(color: string, width: number, height: number): 
     content: (a as any).content,
   }));
 
-  // If 'decision' is present, combine all following articles into one text element and fit to a single page
-  if (articleIds.includes('decision')) {
+  // Combine articles into a single text element and fit to a single page (always on page 2)
+  {
     const size = canvasSizes[PAGES.ARTICLES] || { width: DEFAULT_CANVAS.width, height: DEFAULT_CANVAS.height };
   const contentWidth = size.width - marginX * 2;
     const rightEdge = marginX + contentWidth - padding;
@@ -1111,9 +1126,21 @@ function createCornerDecorations(color: string, width: number, height: number): 
       : articleIds.filter(id => idToItem.has(id));
 
     const baseFont = 23;
-    const baseLH = isTXC ? 1.3 : 1.6;
+    const baseLH = ARTICLES_LINE_HEIGHT;
     let yCursor = startY;
     const builtIntro: PermisElement[] = [];
+    // Helper to append Latin styled ranges with scale for page 2
+    const appendLatinRanges = (text: string, baseFont: number, ranges: any[]) => {
+      const scale = Math.max(0.5, Math.min(1.5, page2LatinScale || 1));
+      if (!text || scale === 1) return ranges;
+      const reLatin = /[A-Za-z\u00C0-\u024F0-9][A-Za-z\u00C0-\u024F0-9._\-\/\\]*/g;
+      const fs = Math.max(8, Math.round((baseFont) * scale));
+      let m: RegExpExecArray | null;
+      while ((m = reLatin.exec(text)) !== null) {
+        ranges.push({ start: m.index, end: m.index + m[0].length, fontSize: fs });
+      }
+      return ranges;
+    };
     const cloneValue = (value: any): any => {
       if (Array.isArray(value)) return value.map(item => cloneValue(item));
       if (value && typeof value === 'object') return { ...value };
@@ -1191,6 +1218,12 @@ function createCornerDecorations(color: string, width: number, height: number): 
     if (textToCheck.includes('إن') && textToCheck.includes('إن رئيس اللجنة المديرة :')) {
       baseEl = { ...baseEl, fontWeight: 'bold' };
     }
+    // Apply Latin scaling styled ranges if needed
+    if (page2LatinScale && page2LatinScale !== 1) {
+      const ranges: any[] = [];
+      appendLatinRanges(String(baseEl.text || ''), baseEl.fontSize || baseFont, ranges);
+      if (ranges.length) (baseEl as any).styledRanges = [ ...((baseEl as any).styledRanges || []), ...ranges ];
+    }
     builtIntro.push(baseEl);
     yCursor += h + gap;
   });
@@ -1199,7 +1232,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
     const decisionItem = idToItem.get('decision');
     if (decisionItem) {
       const text = (decisionItem.title || '').trim() || 'يــقــرر مــا يــلــي :';
-      const fz = Math.max(baseFont + 6, 20);
+      const fz = Math.max(baseFont , 20);
       const lh = 1.2;
       const h = wrapH(text, contentWidth - padding * 2, fz, 'Traditional Arabic', lh);
       let baseEl: PermisElement = {
@@ -1259,7 +1292,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       let fitFont = baseFont;
       let fitLH = baseLH;
       const minFont = Math.max(baseFont - 2, isTXC ? 18 : 22);
-      const minLH = 1.9;
+      const minLH = ARTICLES_LINE_HEIGHT;
       let neededH = combinedH;
       while (neededH > available && fitFont > minFont) {
         fitFont -= 1;
@@ -1292,6 +1325,12 @@ function createCornerDecorations(color: string, width: number, height: number): 
           meta: { isArticle: true, pageIndex: PAGES.ARTICLES, articleId: 'combined', articleGroup: 'article_combined' }
         } as any;
         baseCombined = mergeArticleOverride(baseCombined, 'combined', 'article_combined');
+        // Add Latin scaling styled ranges alongside existing title formatting
+        if (page2LatinScale && page2LatinScale !== 1) {
+          const extraRanges: any[] = [];
+          appendLatinRanges(String(baseCombined.text || ''), baseCombined.fontSize || fitFont, extraRanges);
+          if (extraRanges.length) (baseCombined as any).styledRanges = [ ...((baseCombined as any).styledRanges || []), ...extraRanges ];
+        }
         combinedBlock = [baseCombined];
       }
     }
@@ -1446,9 +1485,10 @@ function createCornerDecorations(color: string, width: number, height: number): 
       textAlign: 'right',
       direction: 'rtl',
       fontSize: isTXC ? 18 : 24,
-      lineHeight: isTXC ? 1.3 : 1.7,
+      lineHeight: ARTICLES_LINE_HEIGHT,
       padding: padding,
       spacing: 0,
+      latinScale: page2LatinScale,
     });
     if (articleElements.length === 0) return;
 
@@ -1470,7 +1510,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
         if (!hasStyledUnderline && ci > 0 && /\u0627\u0644\u0645\u0627\u062F\u0629/.test(txt.slice(0, ci))) {
           const titlePart = txt.slice(0, ci + 1);
           const fz = (el as any).fontSize || 24;
-          const lh = (el as any).lineHeight || 1.8;
+          const lh = (el as any).lineHeight ?? ARTICLES_LINE_HEIGHT;
           // Underline width close to full title visual width (bounded by column)
           const titleVisualW = estimateWidth(titlePart, fz);
           const uW = Math.min(
@@ -1481,7 +1521,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
             id: uuidv4(),
             type: 'line',
             x: 0, // will be right-aligned during positioning
-            y: Math.ceil(fz * lh) - 7,
+            y: Math.ceil(fz * lh) - 8,
             width: uW,
             height: 2,
             rotation: 0,
@@ -1502,7 +1542,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
       let h = 0;
       if (el.type === 'text') {
         const fontSize = (el.fontSize || 20);
-        const lineH = (el.lineHeight || 1.8);
+        const lineH = (el.lineHeight ?? ARTICLES_LINE_HEIGHT);
         const text = String(el.text || '');
         const boxW = Math.max(10, el.width || (contentWidth - padding *2));
         // Use a larger average character width for Arabic to reduce overestimation
@@ -1677,11 +1717,21 @@ function createCornerDecorations(color: string, width: number, height: number): 
     }
     return sizes;
   });
-}, [pushHistory, canvasSizes, initialData]);
+}, [pushHistory, canvasSizes, initialData, page2LatinScale]);
 
   useEffect(() => {
     articleRelayoutRef.current = insertArticlesAsElements;
   }, [insertArticlesAsElements]);
+
+  // Re-layout articles on page 2 when Latin scale changes
+  useEffect(() => {
+    if (!articleRelayoutRef.current) return;
+    if (!selectedArticleIds || selectedArticleIds.length === 0) return;
+    const lookup = new Map(articles.map(a => [a.id, a] as const));
+    const source = selectedArticleIds.map(id => lookup.get(id)).filter((x): x is ArticleItem => Boolean(x));
+    const overrides = captureArticleOverrides(pages, selectedArticleIds);
+    articleRelayoutRef.current(selectedArticleIds, source, overrides);
+  }, [page2LatinScale]);
 
   useEffect(() => {
     let mounted = true;
@@ -2018,7 +2068,7 @@ function createCornerDecorations(color: string, width: number, height: number): 
     // Number line centered
     const LRM = '\u200e';
     const numberLine = `رقم: ${LRM}${code} ${LRM}${typeCode}`.trim();
-    // Center number line in the same band (no change to Arabic text)
+    // Number line right-aligned to start from the right of the page
     els.push({ id: uuidv4(), type: 'text', x: centerBandX, y: boxY + Math.min(120, Math.max(70, Math.floor(boxH/2) + 30))-20, width: centerBandW, text: numberLine, language: 'ar', direction: 'rtl', fontSize: 38, fontFamily: ARABIC_FONTS[0], color: '#000', draggable: true, textAlign: 'center' });
 
      const parseAccessDate = (v: any): Date | null => {
@@ -2432,7 +2482,7 @@ const detailsFontSize = 30;
           fontFamily: ARABIC_FONTS[0],
           color: '#000',
           draggable: true,
-          textAlign: 'center',
+          textAlign: 'right',
           styledRanges: codeStartNotice >= 0 ? [{ start: codeStartNotice, end: codeStartNotice + codePartNotice.length, fontSize: 29 }] : undefined,
         } as any);
         
@@ -2650,6 +2700,33 @@ const detailsFontSize = 30;
   }
 
   const elements = pages[currentPage];
+
+  // Compute the RTL text start guide on page 2 (right edge of aligned article text)
+  const page2RightGuideX = useMemo(() => {
+    if (currentPage !== PAGES.ARTICLES) return null;
+    if (!Array.isArray(elements) || elements.length === 0) return null;
+    const candidates = elements.filter(el => {
+      const meta: any = (el as any).meta || {};
+      const isArticle = meta.isArticle || (el as any).isArticle;
+      if (!isArticle) return false;
+      if (el.type !== 'text') return false;
+      const dir = (el as any).direction || 'rtl';
+      const align = (el as any).textAlign || (dir === 'rtl' ? 'right' : 'left');
+      return align === 'right' && typeof el.x === 'number' && typeof el.width === 'number';
+    });
+    const rights = candidates.map(el => Math.round((el.x as number) + (el.width as number))).filter(v => Number.isFinite(v));
+    if (rights.length > 0) {
+      // Use the most common right edge value if many, otherwise max
+      const freq = new Map<number, number>();
+      rights.forEach(v => freq.set(v, (freq.get(v) || 0) + 1));
+      const sorted = [...freq.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0]);
+      return sorted[0]?.[0] ?? Math.max(...rights);
+    }
+    // Fallback: approximate using a default margin
+    const marginX = 40;
+    const padding = 1;
+    return (currentCanvasSize?.width || DEFAULT_CANVAS.width) - marginX - padding;
+  }, [currentPage, elements, currentCanvasSize]);
   const selectionFontSizeInfo = useMemo(() => {
     if (!textOverlay) return null;
     const { id, selectionStart = 0, selectionEnd = selectionStart } = textOverlay;
@@ -3191,7 +3268,7 @@ const detailsFontSize = 30;
       opacity: 1,
       rotation: 0,
       wrap: type === 'text' ? 'word' : undefined,
-      lineHeight: type === 'text' ? 1.3 : undefined,
+      lineHeight: type === 'text' ? ARTICLES_LINE_HEIGHT : undefined,
       textAlign: type === 'text' ? (currentPage === PAGES.ARTICLES ? 'right' : 'left') : undefined,
     };
     setElementsForCurrent(prev => [...prev, newElement]);
@@ -3408,6 +3485,8 @@ const detailsFontSize = 30;
     if (!stageRef.current) return;
     setIsLoading(true);
     try {
+      setHideGuides(true);
+      await new Promise((r) => setTimeout(r, 50));
       // Always generate A4 pages for consistent print sizing
       const pdf = new jsPDF('p', 'pt', 'a4');
       let a4Width = pdf.internal.pageSize.getWidth();
@@ -3491,6 +3570,7 @@ const detailsFontSize = 30;
       console.error("Failed to generate PDF", error);
       toast.error("Échec de la génération du PDF");
     } finally {
+      setHideGuides(false);
       setIsLoading(false);
     }
   }, [pages, initialData, canvasSizes, apiURL, templates, activeTemplate, pdfQuality]);
@@ -4460,6 +4540,21 @@ const pageLabel = (idx: number) => {
       <div className={styles.body}>
         {currentPage === PAGES.ARTICLES && (
           <aside className={styles.sidebar}>
+            <div className={styles.propRow} style={{ marginBottom: 8 }}>
+              <label>Latin Text Scale</label>
+              <input
+                type="number"
+                step={0.05}
+                min={0.6}
+                max={1.5}
+                value={page2LatinScale}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value || '1');
+                  setPage2LatinScale(Number.isFinite(v) && v > 0 ? v : 1);
+                }}
+                title="Scale for PXC/UTM/TXM/etc on page 2"
+              />
+            </div>
             <ArticlesPanel
               articles={articles}
               selectedIds={selectedArticleIds}
@@ -4578,6 +4673,19 @@ const pageLabel = (idx: number) => {
                   />
                 )}
               </Layer>
+              {/* Overlay guide line for RTL text start on page 2 (designer-only) */}
+              {currentPage === PAGES.ARTICLES && page2RightGuideX != null && !hideGuides && (
+                <Layer listening={false}>
+                  <Rect
+                    x={page2RightGuideX}
+                    y={0}
+                    width={1}
+                    height={currentCanvasSize.height}
+                    fill="#1abc9c"
+                    opacity={0.7}
+                  />
+                </Layer>
+              )}
             </Stage>
           </div>
           {textOverlay && (
@@ -4739,7 +4847,7 @@ const pageLabel = (idx: number) => {
 
                   <div className={styles.propRow}>
                     <label>Line Height</label>
-                    <input type="number" step="0.05" value={(firstSelected as any).lineHeight || 1.3} onChange={(e) => handlePropertyChange('lineHeight', parseFloat(e.target.value || '1.3'))} />
+                    <input type="number" step="0.05" value={(firstSelected as any).lineHeight || ARTICLES_LINE_HEIGHT} onChange={(e) => handlePropertyChange('lineHeight', parseFloat(e.target.value || String(ARTICLES_LINE_HEIGHT)))} />
                   </div>
                 </>
               )}
