@@ -3,6 +3,7 @@ import type { ArticleItem } from "./types";
 import TEM from "./articles-tem.json";
 import TEC from "./articles-tec.json";
 import TECEXT from "./articles-tec-extension.json";
+import TEMSUITE from "./articles-tem-suite-exploration.json";
 import APM from "./articles-apm.json";
 import AAC from "./articles-aac.json";
 import AAM from "./articles-aam-mines.json";
@@ -27,6 +28,7 @@ type ArticleSetData = {
 
 const STATIC_SETS: Record<string, ArticleSetData> = {
   "permis-tem": { name: (TEM as any).name || "TEM - ترخيص الاستكشاف", articles: (TEM as any).articles || [] },
+  "permis-tem-suite-exploration": { name: (TEMSUITE as any).name || "TEM SUITE A EXPLORATION", articles: (TEMSUITE as any).articles || [] },
   "permis-tec": { name: (TEC as any).name || "TEC", articles: (TEC as any).articles || [] },
   "permis-tec-extension": { name: (TECEXT as any).name || "TEC EXTENSION", articles: (TECEXT as any).articles || [] },
   "permis-apm": { name: (APM as any).name || "APM", articles: (APM as any).articles || [] },

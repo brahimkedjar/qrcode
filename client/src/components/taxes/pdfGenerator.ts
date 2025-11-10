@@ -402,7 +402,7 @@ const renderOrderToDoc = (doc: jsPDF, type: 'DEA' | 'TS' | 'PRODUIT_ATTRIBUTION'
     // Legal references
     setNormalFont1();
     const legalReferences = [
-      "Vu la loi n° 25-12 du 9 Safar 1447 correspondant au 3 août 2025 portant loi régissant les activités minières, notamment son article 213 ;",
+      "Vu la loi n° 12-25 du 9 Safar 1447 correspondant au 3 août 2025 portant loi régissant les activités minières, notamment son article 213 ;",
       "Vu la loi n°15-18 du 30 décembre 2015 portant loi de finances pour 2016, notamment son article 53;",
       "Vu la loi n°16-14 du 28 décembre 2016 portant loi de finances pour 2017, notamment son article 132 ;",
       "Vu l’instruction n°02 du 16 janvier 2020 et n°03 du 19 janvier 2020 relatives à la clôture du compte d’affectation spéciale n°302-105 ; « Fonds du Patrimoine Public minier »;"
@@ -480,7 +480,7 @@ const renderOrderToDoc = (doc: jsPDF, type: 'DEA' | 'TS' | 'PRODUIT_ATTRIBUTION'
     // Legal references
     setNormalFont1();
     const legalReferences = [
-      "Vu la loi n° 25-12 du 9 Safar 1447 correspondant au 3 août 2025 portant loi régissant les activités minières, notamment son article 213 ;",
+      "Vu la loi n° 12-25 du 9 Safar 1447 correspondant au 3 août 2025 portant loi régissant les activités minières, notamment son article 213 ;",
       "Vu la loi n°15-18 du 30 décembre 2015 portant loi de finances pour 2016, notamment son article 53;",
       "Vu la loi n°16-14 du 28 décembre 2016 portant loi de finances pour 2017, notamment son article 132 ;",
       "Vu l'instruction n°02 du 16 janvier 2020 et n°03 du 19 janvier 2020 relatives à la clôture du compte d'affectation spéciale n°302-105 ; « Fonds du Patrimoine Public minier » ;",

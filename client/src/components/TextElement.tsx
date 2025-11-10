@@ -138,11 +138,11 @@ export const TextElement: React.FC<TextElementProps> = ({
           });
         }
         splitRuns.push({
-          ...run,
-          start: run.start + matchStart,
-          end: run.start + matchStart + matchText.length,
-          fontSize: Math.max(run.fontSize, 20),
-        });
+            ...run,
+            start: run.start + matchStart,
+            end: run.start + matchStart + matchText.length,
+            fontSize: run.fontSize,
+          });
         lastIndex = matchStart + matchText.length;
       }
       if (lastIndex < slice.length) {
